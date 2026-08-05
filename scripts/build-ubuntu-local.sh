@@ -111,6 +111,15 @@ mkdir -p "$DEB_OUTPUT"
 "$PROJECT_DIR/packaging/debian/build-deb.sh" "$TARBALL" "$DEB_OUTPUT"
 
 # Find the built .deb
+#
+# KNOWN BUG (found 2026-08-03, not fixed here - unrelated to whatever feature you're
+# building): this glob is unfiltered, so build-deb.sh's transitional dummy package
+# (claude-desktop-bin_<ver>_all.deb, ~1KB, just a Depends: stub for the old package
+# name) can sort before the real claude-desktop-extra_<ver>_<arch>.deb (~150MB+) and
+# get picked here instead. When that happens, the "built successfully" / "to install"
+# messages below point at the useless stub. The real installable package is always
+# under $DEB_OUTPUT (build/deb/) named claude-desktop-extra_*.deb - check there by
+# name if this script's own summary looks suspiciously small.
 DEB_FILE=$(find "$DEB_OUTPUT" -name "*.deb" -type f | head -1)
 if [ -z "$DEB_FILE" ]; then
     log_error "Build failed - no .deb file found"

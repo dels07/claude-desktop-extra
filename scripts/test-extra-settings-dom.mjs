@@ -235,6 +235,28 @@ async function featuresPanel(featuresItem) {
   await sleep(120);
   const panel = document.querySelector(".cdbx-panel");
   ok(!!panel, "the Features panel is mounted");
+
+  // Panel tabs: the same renderToggleRow contract as the glow switch below,
+  // one row earlier in the real Features panel. (The diff-views row that sits
+  // between the two is not exercised in this file - this fixture's cdbExtra
+  // mock carries no diffViewsRead/Set, so renderToggleRow's partial-install
+  // guard silently skips it; see js/extra_settings_page.js.)
+  const tabsSel = ".cdbx-switch[aria-label=\"show the Code tab's side panels as tabs instead of a split layout\"]";
+  const tabs = panel && panel.querySelector(tabsSel);
+  ok(!!tabs, "the panel tabs switch renders in the Features panel");
+  if (tabs) {
+    const tabsRow = tabs.closest(".cdbx-row");
+    ok(tabsRow.querySelector(".cdbx-id").textContent === "Panel tabs", "titled Panel tabs");
+    ok(tabs.getAttribute("aria-checked") === "false", "the panel tabs switch reflects enabled:false");
+    ok(!tabs.disabled, "the panel tabs switch is enabled when the .jsonc does not lock it");
+
+    tabs.click();
+    await sleep(60);
+    ok(window.__panelTabsCalls.length === 1 && window.__panelTabsCalls[0] === true,
+       "clicking it calls panelTabsSet(true) exactly once: " + JSON.stringify(window.__panelTabsCalls));
+    ok(tabs.getAttribute("aria-checked") === "true", "the switch reflects the write");
+  }
+
   const glow = panel && panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']");
   ok(!!glow, "the Cowork glow switch renders in the Features panel");
   if (!glow) return;
@@ -272,6 +294,28 @@ async function featuresPanel(featuresItem) {
      !Array.from(panel.querySelectorAll(".cdbx-pathlink"))
         .some(function (a) { return a.textContent.endsWith("claude-desktop-extra.json"); }),
      "the internal .json is not linked anywhere in the panel");
+
+  // Locked: a hand-edited claude-desktop-extra.jsonc wins the startup merge, so
+  // a fresh mount must render disabled with the "edit that file" affordance -
+  // not just decline the write. Leave the panel and come back so renderFeatures
+  // re-reads panelTabsRead() against the updated fixture state.
+  document.getElementById("row-account").click();
+  await sleep(30);
+  window.__panelTabsState = { ok: true, enabled: true, lockedByJsonc: true, source: "jsonc-locked" };
+  featuresItem.click();
+  await sleep(120);
+  const panel2 = document.querySelector(".cdbx-panel");
+  const tabs2 = panel2 && panel2.querySelector(tabsSel);
+  ok(!!tabs2, "the panel tabs switch renders again after remounting the panel");
+  if (tabs2) {
+    ok(tabs2.getAttribute("aria-checked") === "true", "a locked response still reports its real state (on)");
+    ok(tabs2.disabled, "but the switch is disabled once the .jsonc locks it");
+    ok(tabs2.title.indexOf("claude-desktop-extra.jsonc") >= 0,
+       "and names the file to edit: " + tabs2.title);
+    ok(tabs2.closest(".cdbx-row").querySelector(".cdbx-state").textContent
+         .indexOf("claude-desktop-extra.jsonc") >= 0,
+       "the state line says so too");
+  }
 }
 
 // The Deployment panel: the 1P/3P switch writes the persisted deploymentMode and
@@ -926,6 +970,8 @@ window.__themes = [
 // cdb-deploy:read returns, secrets already replaced by the placeholder.
 window.__deployCalls = [];
 window.__revealCalls = [];
+window.__panelTabsCalls = [];
+window.__panelTabsState = { ok: true, enabled: false, lockedByJsonc: false, source: "default" };
 window.__deployState = {
   ok: true,
   running: "1p",
@@ -995,6 +1041,11 @@ window.cdbExtra = {
   appRelaunch: stub({ ok: true }),
   glowRead: stub({ ok: true, mode: "pulse", opacity: 0.55, defaultOpacity: 0.55, lockedByJsonc: null }),
   glowSet: stub({ ok: true, mode: "calm", windows: 1, path: "/tmp/x.json" }),
+  panelTabsRead: function () { return Promise.resolve(window.__panelTabsState); },
+  panelTabsSet: function (enabled) {
+    window.__panelTabsCalls.push(enabled);
+    return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/panel-tabs.json" });
+  },
   paths: stub({ ok: true, paths: {} }),
   deployRead: function () { return Promise.resolve(window.__deployState); },
   deployMode: function (mode) {

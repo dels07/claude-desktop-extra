@@ -14,7 +14,7 @@
 
 import std/[os, strutils]
 
-const FIX_JS = staticRead("../js/fix_cowork_font.js")
+const FIX_JS = staticRead("../../js/fix_cowork_font.js")
 
 proc escapeJs(s: string): string =
   result = s

@@ -16,7 +16,7 @@ drawn for that palette's name or colors.
 - **Where the specs live:**
   | Tier | Spec source |
   |------|-------------|
-  | curated built-ins (7) | inline in `patches/add_feature_custom_themes.nim` |
+  | curated built-ins (7) | inline in `patches/core/add_feature_custom_themes.nim` |
   | gaming (6) | `js/gaming_themes.json` |
   | community (84) | curated in `scripts/community-spinners.json`, merged into `js/community_themes.json` by `scripts/generate-community-themes.mjs` |
   | your own themes | the `spinner` key of your theme in `claude-desktop-bin.jsonc` |
@@ -109,7 +109,7 @@ Colors: `#E52521` cap, `#FFFFFF` spots, `#FAD9C0` face, `#3A2A1A` outline + eyes
 Build order matters: outline first (behind), then cap, face, spots, eyes on top.
 
 (Full path array: the `mario` entry of `__cdb_builtins` in
-`patches/add_feature_custom_themes.nim`, identical to the 8-path block in the injection
+`patches/core/add_feature_custom_themes.nim`, identical to the 8-path block in the injection
 notes.)
 
 ---
@@ -143,7 +143,7 @@ Follows the theme accent.
 - Color: `currentColor` (no `fill`).
 
 The path is long (31 sub-shapes); see the `nord` entry of `__cdb_builtins` in
-`patches/add_feature_custom_themes.nim` for the literal string. It begins:
+`patches/core/add_feature_custom_themes.nim` for the literal string. It begins:
 
 ```
 M50 53.2 L90 53.2 L90 46.8 L50 46.8 Z M67.92 51.2 L72.42 58.99 ...  (31 subpaths) ... M44 50 a 6 6 0 1 0 12 0 a 6 6 0 1 0 -12 0 z

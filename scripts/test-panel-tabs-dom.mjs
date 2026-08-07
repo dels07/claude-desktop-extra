@@ -2,7 +2,7 @@
 /*
  * test-panel-tabs-dom.mjs - headless-Chromium DOM tests for the panel tabs
  * feature (js/panel_tabs_{layout,store,harvest,page}.js, delivered by
- * patches/add_feature_panel_tabs.nim).
+ * patches/community/add_feature_panel_tabs.nim).
  *
  * The Code tab is REMOTE claude.ai markup, so a clean patch run says nothing
  * about this feature working. What CAN be pinned is that the modules derive

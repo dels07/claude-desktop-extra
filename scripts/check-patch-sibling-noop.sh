@@ -28,7 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 PATCHES_DIR="${1:-$REPO_DIR/patches}"
 
-echo "=== Checking for sibling-file no-op anti-pattern in patches/*.nim ==="
+echo "=== Checking for sibling-file no-op anti-pattern in patches/*/*.nim ==="
 
 # The smell: deriving a SECOND file path from the patch's own target dir.
 # `parentDir(<x>)/ "<file>"` or `<x>.parentDir / "<file>"` where <file> is a
@@ -50,7 +50,7 @@ SMELL_RE='(parentDir\([[:alnum:]_]+\)[[:space:]]*/[[:space:]]*"|\.parentDir[[:sp
 # a literal `#`. We drop any line whose first non-space char is `#`, and for inline
 # comments we cut at ` #`.
 hits=""
-for f in "$PATCHES_DIR"/*.nim; do
+for f in "$PATCHES_DIR"/*/*.nim; do
   [ -f "$f" ] || continue
   while IFS= read -r line; do
     lineno="${line%%:*}"

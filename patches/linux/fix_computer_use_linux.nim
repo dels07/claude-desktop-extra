@@ -14,10 +14,10 @@
 import std/[os, strformat, strutils, options]
 import std/nre
 
-const LINUX_EXECUTOR_JS = staticRead("../js/cu_linux_executor.js")
-const LINUX_HANDLER_INJECTION_JS = staticRead("../js/cu_handler_injection.js")
-const MODE_PREAMBLE_JS = staticRead("../js/cu_mode_preamble.js")
-const KWIN_EXECUTOR_SOURCE = staticRead("../js/executor_linux.js")
+const LINUX_EXECUTOR_JS = staticRead("../../js/cu_linux_executor.js")
+const LINUX_HANDLER_INJECTION_JS = staticRead("../../js/cu_handler_injection.js")
+const MODE_PREAMBLE_JS = staticRead("../../js/cu_mode_preamble.js")
+const KWIN_EXECUTOR_SOURCE = staticRead("../../js/executor_linux.js")
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 

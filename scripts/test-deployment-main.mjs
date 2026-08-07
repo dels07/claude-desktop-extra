@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * test-deployment-main.mjs - main-process tests for the Deployment panel's half of
- * patches/add_feature_extra_settings.nim: the ipcMain handlers that read and write
+ * patches/core/add_feature_extra_settings.nim: the ipcMain handlers that read and write
  * the 1P/3P deployment mode and the third-party configuration.
  *
  * Why this exists: a green patch run only proves the IIFE was inserted. What can
@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PATCH_BIN = join(ROOT, "patches", "add_feature_extra_settings");
+const PATCH_BIN = join(ROOT, "patches", "core", "add_feature_extra_settings");
 const SKIP_EXIT = 3;
 const KEEP = "__cdb_unchanged__";
 
@@ -45,12 +45,12 @@ function section(title) { console.log("\n" + title); }
 function buildModule() {
   if (!existsSync(PATCH_BIN)) {
     try {
-      execFileSync("make", ["-C", join(ROOT, "patches"), "add_feature_extra_settings"], { stdio: "ignore" });
+      execFileSync("make", ["-C", join(ROOT, "patches"), "core/add_feature_extra_settings"], { stdio: "ignore" });
     } catch {}
   }
   if (!existsSync(PATCH_BIN)) {
-    console.error("SKIP: patches/add_feature_extra_settings is not compiled " +
-      "(run: make -C patches add_feature_extra_settings)");
+    console.error("SKIP: patches/core/add_feature_extra_settings is not compiled " +
+      "(run: make -C patches core/add_feature_extra_settings)");
     process.exit(SKIP_EXIT);
   }
   try { chmodSync(PATCH_BIN, 0o755); } catch {}

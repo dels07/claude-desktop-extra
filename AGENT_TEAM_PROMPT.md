@@ -14,7 +14,7 @@ You coordinate teammates, plan work, and handle update strategy. You do NOT writ
 
 **claude-desktop-extra** (`/home/patrickjaja/development/claude-desktop-extra/`)
    Repackages Anthropic's **official Claude Desktop Linux `.deb`** (apt repo `https://downloads.claude.ai/claude-desktop/apt`; bundles Electron 42.5.1 and a native Cowork VM backend) as native packages for the distros Anthropic does not ship (Arch via our own pacman repo, Fedora/RHEL, NixOS, AppImage) plus our own Debian/Ubuntu `.deb`.
-   Nim patches in `patches/` (compiled to native binaries) fix Linux-specific code in the minified Electron `app.asar` JS bundle and add our value-adds (Computer Use, custom themes, multi-profile, Quick Entry).
+   Nim patches in `patches/` (grouped into `linux/`, `community/` and `core/`, compiled to native binaries) fix Linux-specific code in the minified Electron `app.asar` JS bundle and add our value-adds (Computer Use, custom themes, multi-profile, Quick Entry).
    Build: `./scripts/build-local.sh` (auto-downloads the latest official `.deb`, verifies it, extracts `app.asar`, patches, repackages).
    Install: `sudo pacman -U build/claude-desktop-extra-*-x86_64.pkg.tar.zst` (requires sudo — ASK the user).
 
@@ -60,9 +60,9 @@ Your responsibilities:
   - `rg -n 'process\.platform' .vite/build/index.js` — find all platform checks
   - `rg -n 'darwin\|win32' .vite/build/index.js` — find macOS/Windows-only code paths
   - `rg -n 'status:\"unavailable\"\|status:\"unsupported\"' .vite/build/index.js` — find gated features
-  - Compare against existing patches in `patches/` to find uncovered gaps.
+  - Compare against existing patches (`ls patches/*/*.nim`) to find uncovered gaps.
 - For each gap found, determine if it can be patched and how. Follow the existing patch style:
-  - Nim scripts in `patches/` (compiled to native binaries) using `re2`/`nre` with flexible `[\w$]+` patterns (never hardcode minified names).
+  - Nim scripts in `patches/<group>/` (compiled to native binaries) using `re2`/`nre` with flexible `[\w$]+` patterns (never hardcode minified names).
   - Always verify with `node --check` after patching.
   - Document break risk and debug `rg` patterns (see README.md patches table).
 - Check built-in MCP servers (see `baseline/CLAUDE_BUILT_IN_MCP.md`). Are they all functional on Linux? Do they need Linux-specific binaries?

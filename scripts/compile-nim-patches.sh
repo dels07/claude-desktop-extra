@@ -16,9 +16,12 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 PATCHES_DIR="${1:-$REPO_DIR/patches}"
 shift 2>/dev/null || true
 
-if [ ! -d "$PATCHES_DIR" ] || ! ls "$PATCHES_DIR"/*.nim &>/dev/null; then
-    echo "[nim] No .nim files found in patches/ — nothing to compile"
-    exit 0
+# Patch sources live in category subdirs (linux/, core/, community/). Finding
+# none is FATAL, never "nothing to do" - an empty glob here would otherwise
+# produce a release with zero patches applied.
+if [ ! -d "$PATCHES_DIR" ] || ! compgen -G "$PATCHES_DIR/*/*.nim" >/dev/null; then
+    echo "[nim] [ERROR] No .nim sources found under $PATCHES_DIR/{linux,core,community}/"
+    exit 1
 fi
 
 DOCKER_IMAGE="${NIM_DOCKER_IMAGE:-nimlang/nim:latest}"

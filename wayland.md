@@ -91,7 +91,7 @@ Classic Wayland focus-stealing-prevention symptom. When `Po.show()` is called
 from a background context, Mutter won't transfer focus; Electron emits `blur`
 anyway because the logical focus state just changed; the upstream dismiss
 handler runs before you can type. Fixed by
-`patches/fix_quick_entry_wayland_blur_guard.py` — **the blur handler is
+`patches/linux/fix_quick_entry_wayland_blur_guard.nim` - **the blur handler is
 focus-tracked**: blurs are ignored unless a `focus` event has fired on the
 Quick Entry window since the last `show`/`hide`. Phantom blurs where Mutter
 never transferred focus are dropped. On platforms where focus *does* transfer

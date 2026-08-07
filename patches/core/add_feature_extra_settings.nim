@@ -1,7 +1,8 @@
 # @patch-target: app.asar.contents/.vite/build/index.js
 # @patch-type: nim
 #
-# "Extra" area inside the claude.ai Settings modal (Themes + Features + Deployment).
+# "Extra" area inside the claude.ai Settings modal (Themes + Community Features +
+# Anthropic Features + Deployment).
 #
 # The Settings modal is rendered by the REMOTE claude.ai SPA inside the mainView
 # WebContentsView, so the UI cannot be a React route of ours: it is injected into
@@ -45,9 +46,9 @@
 
 import std/[os, strutils, json]
 
-const MAIN_JS = staticRead("../js/extra_settings_main.js")
-const PAGE_JS = staticRead("../js/extra_settings_page.js")
-const PAGE_CSS = staticRead("../js/extra_settings_page.css")
+const MAIN_JS = staticRead("../../js/extra_settings_main.js")
+const PAGE_JS = staticRead("../../js/extra_settings_page.js")
+const PAGE_CSS = staticRead("../../js/extra_settings_page.css")
 
 # The page script and its stylesheet are spliced into the main-process IIFE as
 # JS string literals (escapeJson yields a quoted, fully escaped literal). The
@@ -133,6 +134,6 @@ when isMainModule:
 
   if output != input:
     writeFile(filePath, output)
-    echo "  [PASS] Extra settings area (Themes + Features) added"
+    echo "  [PASS] Extra settings area (Themes + Community Features + Anthropic Features + Deployment) added"
   else:
     echo "  [WARN] No changes made"

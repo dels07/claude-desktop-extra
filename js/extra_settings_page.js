@@ -408,6 +408,13 @@
     ["circle", { cx: "15.5", cy: "8", r: "2.6" }, SOLID],
     ["circle", { cx: "8.5", cy: "16", r: "2.6" }, SOLID]
   ];
+  // A flag on its pole: Anthropic's own rollout flags, as opposed to the
+  // features this package adds next to them.
+  var ICON_FLAGS = [
+    ["line", { x1: "5.6", y1: "2.8", x2: "5.6", y2: "21.2" }, STROKE],
+    ["path", { d: "M5.6 4.4h12.6l-2.9 4.1 2.9 4.1H5.6z" }, SOLID],
+    ["line", { x1: "3.2", y1: "21.2", x2: "9.4", y2: "21.2" }, STROKE]
+  ];
   // Two stacked backends with a live indicator each: the deployment the app talks
   // to, personal or your own.
   var ICON_DEPLOY = [
@@ -422,7 +429,10 @@
   // render function.
   var NAV_ITEMS = [
     { kind: "themes", label: "Themes", icon: ICON_THEMES },
-    { kind: "features", label: "Features", icon: ICON_FEATURES },
+    // Short labels: upstream's nav column is narrow and truncates anything
+    // longer, so the full name lives in a tooltip and in the panel's own h1.
+    { kind: "features", label: "Community", icon: ICON_FEATURES, tooltip: "Community Features" },
+    { kind: "flags", label: "Anthropic", icon: ICON_FLAGS, tooltip: "Anthropic Features" },
     { kind: "deploy", label: "Deployment", icon: ICON_DEPLOY }
   ];
 
@@ -525,6 +535,9 @@
   function makeItems(template) {
     return NAV_ITEMS.map(function (spec) {
       var item = makeItem(template, spec.label, spec.icon);
+      // Only the rows whose label had to be shortened carry one: a tooltip that
+      // repeats the label it is on is noise.
+      if (spec.tooltip) item.control.setAttribute("title", spec.tooltip);
       item.kind = spec.kind;
       return item;
     });
@@ -901,22 +914,25 @@
     return (entry.displayName || entry.name || "").toLowerCase();
   }
 
-  // --- ONE TOGGLE ROW, TWO USES -------------------------------------------
-  // Both of our own switches (Source control, Motion) are the same widget: a
-  // section heading, a titled row with a note and a state line, a
-  // role="switch" button, a read call that fills it in, and a write call that
-  // flips it and toasts. They were two ~90-line near-verbatim copies; the only
-  // real differences are the strings, the two bridge method names, and how a
-  // response maps to on/off. Those are the spec below.
+  // --- ONE TOGGLE ROW, EVERY COMMUNITY FEATURE -----------------------------
+  // Every one of our own switches (Source control, Layout, Motion, Shortcuts)
+  // is the same widget: a section heading, a titled row with a note and a state
+  // line, a role="switch" button, a read call that fills it in, and a write call
+  // that flips it and toasts. The only real differences are the strings, the two
+  // bridge method names, and how a response maps to on/off. Those are the spec
+  // below.
   //
-  // ONE SPELLING FOR THE LOCK. Both main-side handlers report a hand-edited
+  // ONE SPELLING FOR THE LOCK. Every main-side handler reports a hand-edited
   // .jsonc as `lockedByJsonc` - the page previously spoke of `locked` for one
   // row and `lockedByJsonc` for the other, for no reason beyond the order they
   // were written in.
+  //
+  // Returns the two nodes it appended so the panel can filter over them, or
+  // undefined when the row was skipped - callers must handle that.
   function renderToggleRow(panel, spec) {
     // The bridge half of these switches lives in the mainView preload. On a
     // partially updated install (older preload, newer page) skip the row instead
-    // of throwing and taking the whole Features panel down with it.
+    // of throwing and taking the whole Community Features panel down with it.
     if (!api || typeof api[spec.read] !== "function" || typeof api[spec.write] !== "function") return;
 
     var head = el("div", "cdbx-sec-h");
@@ -988,6 +1004,8 @@
     }, function (err) {
       stateLine.textContent = "Unavailable: " + (err && err.message ? err.message : String(err));
     });
+
+    return { head: head, host: host, spec: spec };
   }
 
   // --- source control: the Code tab's diff view modes ----------------------
@@ -996,13 +1014,14 @@
   // default: the feature reshapes Anthropic's own diff panel, so it is opt-in and
   // this row is the way to ask for it.
   function renderDiffViewsRow(panel) {
-    renderToggleRow(panel, {
+    return renderToggleRow(panel, {
       section: "Source control",
       title: "Diff view modes",
       note: "Adds a scope dropdown to the Code tab's diff panel - Working tree, Branch changes " +
         "(committed work only) and Latest turn - and compares against the branch you actually " +
         "branched from. Also adds an expand/collapse-all button next to it, which keeps expanding " +
-        "files as they load while it is on. Off leaves the panel exactly as Anthropic ships it.",
+        "files as they load while it is on. Off leaves the panel exactly as Anthropic ships it. " +
+        "Applies live - an open Code tab picks the change up within a few seconds.",
       ariaLabel: "show the diff view modes dropdown and the expand/collapse-all button",
       read: "diffViewsRead",
       write: "diffViewsSet",
@@ -1027,7 +1046,7 @@
   // Ours, applies live, and off by default: it reshapes how Anthropic's own tile
   // layout is presented, so it is opt-in and this row is the way to ask for it.
   function renderPanelTabsRow(panel) {
-    renderToggleRow(panel, {
+    return renderToggleRow(panel, {
       section: "Layout",
       title: "Panel tabs",
       note: "Shows the Code tab's side panels as tabs instead of squeezing them side by side, so " +
@@ -1035,7 +1054,7 @@
         "their place, so switching back is instant - that also means a live preview goes on " +
         "running while you are not looking at it. Drag the divider to resize; opening or closing a " +
         "panel will not move it. Off gives you the normal split layout back, and nothing you have " +
-        "open is lost.",
+        "open is lost. Applies live - an open Code tab picks the change up within a few seconds.",
       ariaLabel: "show the Code tab's side panels as tabs instead of a split layout",
       read: "panelTabsRead",
       write: "panelTabsSet",
@@ -1057,10 +1076,10 @@
   }
 
   // --- motion: the pulsing Cowork glow ------------------------------------
-  // Sits at the top of the Features panel rather than in its own nav entry - it
-  // is ours and applies live, so it goes ahead of the GrowthBook flag list.
+  // Ours and it applies live, so it is a row in Community Features rather than a
+  // nav entry of its own.
   function renderGlowRow(panel) {
-    renderToggleRow(panel, {
+    return renderToggleRow(panel, {
       section: "Motion",
       title: "Calm the Cowork glow",
       // Keep this short: the mechanism and the GPU reasoning belong in the README
@@ -1070,7 +1089,7 @@
       ariaLabel: "calm the Cowork glow",
       read: "glowRead",
       write: "glowSet",
-      lockFile: "claude-desktop-bin.jsonc",
+      lockFile: "claude-desktop-extra.jsonc",
       isOn: function (res) { return res.mode === "calm"; },
       describe: function (on, res) {
         return on
@@ -1084,6 +1103,35 @@
           : "Cowork glow restored to pulsing";
       },
       errorPrefix: "Could not change the glow: "
+    });
+  }
+
+  // --- shortcuts: the Ctrl+Shift+T theme gallery ---------------------------
+  // The one row here that is ON unless you say otherwise: the shortcut is how a
+  // fresh install finds the themes at all, so an absent key means on and only an
+  // explicit false takes it away.
+  function renderThemePickerRow(panel) {
+    return renderToggleRow(panel, {
+      section: "Shortcuts",
+      title: "Theme picker",
+      note: "Ctrl+Shift+T opens a searchable gallery of every theme this build knows about. " +
+        "Clicking a card applies it live and saves it; the same chord closes the window again. " +
+        "Applies live - the shortcut reads this switch on every press.",
+      ariaLabel: "open the theme gallery with Ctrl+Shift+T",
+      read: "pickerRead",
+      write: "pickerSet",
+      lockFile: "claude-desktop-extra.jsonc",
+      isOn: function (res) { return res.enabled !== false; },
+      describe: function (on) {
+        return on ? "on - Ctrl+Shift+T opens the gallery" : "off - the shortcut does nothing";
+      },
+      writeArg: function (next) { return next; },
+      toast: function (next) {
+        return next
+          ? "Theme picker on - Ctrl+Shift+T opens the gallery"
+          : "Theme picker off - Ctrl+Shift+T does nothing";
+      },
+      errorPrefix: "Could not change the theme picker: "
     });
   }
 
@@ -1219,17 +1267,85 @@
     });
   }
 
-  // --- features panel ------------------------------------------------------
+  // --- community features panel --------------------------------------------
+  // Only our own switches live here, and every one of them applies live - which
+  // is why this panel has no restart notice. Anthropic's own flags, which do
+  // need a restart, are a nav entry of their own.
+  //
+  // "Applies live" was verified per row, not assumed - each note says so, and
+  // this is where each one gets it from:
+  //   * diff view modes - the main side flips its own `prefEnabled` inside the
+  //     pref-set handler and replays upstream's invalidation (nudgeRefetch), so
+  //     the git IPC rewrite stops or starts at once; the page half re-reads
+  //     state() on a 5s poll and mounts or tears down the dropdown and the
+  //     expand button with it.
+  //   * panel tabs - same shape: the page half polls state() every 5s and
+  //     setEnabled(false) removes the tab bar and untags the columns.
+  //   * cowork glow - the set() handler insertCSS/removeInsertedCSS-es every
+  //     tracked claude.ai view immediately, so it is instant.
+  //   * theme picker - the hotkey re-reads the config file on every press.
+  // The two polled ones are the reason their notes promise "within a few
+  // seconds" rather than "instantly".
+
+  var FEATURE_ROWS = [
+    renderDiffViewsRow,
+    renderPanelTabsRow,
+    renderGlowRow,
+    renderThemePickerRow
+  ];
 
   function renderFeatures(panel) {
     clear(panel);
-    panel.appendChild(el("div", "cdbx-h1", "Features"));
+    panel.appendChild(el("div", "cdbx-h1", "Community Features"));
+    panel.appendChild(el("div", "cdbx-sub",
+      "Optional features this package adds on top of the official build - each one is a single patch " +
+      "in patches/community/, and each applies live."));
 
-    // Ours, and they apply live - so they go above the GrowthBook description
-    // and the restart notice, both of which only speak for the flag list.
-    renderDiffViewsRow(panel);
-    renderPanelTabsRow(panel);
-    renderGlowRow(panel);
+    var search = el("input", "cdbx-search");
+    search.type = "search";
+    panel.appendChild(search);
+
+    var rows = [];
+    FEATURE_ROWS.forEach(function (render) {
+      // renderToggleRow answers nothing when the bridge half of a row is missing
+      // (older preload, newer page) - such a row is simply not there to filter.
+      var row = render(panel);
+      if (row) rows.push(row);
+    });
+    search.placeholder = "Filter " + rows.length + " features by name or description";
+
+    var empty = el("div", "cdbx-empty", "No feature matches that filter.");
+    empty.style.display = "none";
+    panel.appendChild(empty);
+
+    // Hide, never re-render: each row fills itself in from an async read over
+    // IPC, so redrawing on every keystroke would re-fire all of them and reset
+    // switches the user just flipped.
+    function draw(filter) {
+      var needle = (filter || "").trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var hay = (row.spec.section + " " + row.spec.title + " " + row.spec.note).toLowerCase();
+        var hit = !needle || hay.indexOf(needle) >= 0;
+        row.head.style.display = hit ? "" : "none";
+        row.host.style.display = hit ? "" : "none";
+        if (hit) shown++;
+      });
+      empty.style.display = shown ? "none" : "";
+    }
+
+    search.addEventListener("input", function () { draw(search.value); });
+    draw("");
+  }
+
+  // --- anthropic features panel --------------------------------------------
+  // Anthropic's own GrowthBook flags. Nothing here applies live: the app reads
+  // most of them once at startup, so this panel carries the restart notice the
+  // Community Features panel does not need.
+
+  function renderFlags(panel) {
+    clear(panel);
+    panel.appendChild(el("div", "cdbx-h1", "Anthropic Features"));
 
     panel.appendChild(el("div", "cdbx-sub",
       "Anthropic's GrowthBook feature flags, as observed being read by this build. " +
@@ -1540,7 +1656,7 @@
     live.appendChild(el("div", "cdbx-mode-path", state.paths.userData));
     card.appendChild(live);
 
-    // Undoing the mode choice itself: the same "clear" the Features panel offers
+    // Undoing the mode choice itself: the same "clear" the Anthropic Features panel offers
     // for a flag override, and the same value upstream's own setDeploymentMode
     // takes. Without it, one click on 1P or 3P is permanent - the key stays in
     // the file forever and keeps overriding the stored configuration.
@@ -2084,6 +2200,7 @@
   var PANELS = {
     themes: renderThemes,
     features: renderFeatures,
+    flags: renderFlags,
     deploy: renderDeploy
   };
 

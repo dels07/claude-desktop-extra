@@ -1012,6 +1012,47 @@
       return { ok: true, mode: mode, windows: live.windows, path: res.path };
     },
 
+    // Theme picker (Ctrl+Shift+T). The window and the hotkey live in
+    // patches/community/add_feature_theme_picker.nim, which reads this same key
+    // itself on every press - persistence is ours because this file is the
+    // single writer of the .json, the same cross-patch split as the glow above.
+    //
+    // ON IS THE DEFAULT: the shortcut is how a fresh install finds the themes,
+    // so an absent key means enabled and only an explicit false takes it away.
+    "cdb-picker:read": function () {
+      if (typeof globalThis.__cdbOpenThemePicker !== "function") {
+        return { ok: false, error: "the theme picker patch is not installed in this build" };
+      }
+      var p = __cdbEx_paths();
+      var jsonc = __cdbEx_readFileKey(p.jsonc, "themePicker");
+      var json = __cdbEx_readFileKey(p.json, "themePicker");
+      var value = typeof jsonc === "boolean" ? jsonc : json;
+      return {
+        ok: true,
+        enabled: value !== false,
+        // A hand-edited .jsonc wins the per-key merge, so the switch must show
+        // itself as locked rather than silently disagree with the file. Reported
+        // as true/null, not as the value: the page only tests truthiness, and a
+        // locking `false` would read as "not locked".
+        lockedByJsonc: typeof jsonc === "boolean" ? true : null
+      };
+    },
+
+    "cdb-picker:set": function (enabled) {
+      if (typeof globalThis.__cdbOpenThemePicker !== "function") {
+        return { ok: false, error: "the theme picker patch is not installed in this build" };
+      }
+      if (typeof enabled !== "boolean") return { ok: false, error: "enabled must be a boolean" };
+      var res = __cdbEx_writeCfg(function (cfg) {
+        // On is the default, so only the off case needs a key on disk.
+        if (enabled) delete cfg.themePicker;
+        else cfg.themePicker = false;
+        return enabled;
+      });
+      if (!res.ok) return res;
+      return { ok: true, enabled: enabled, path: res.path };
+    },
+
     "cdb-flags:catalog": function () {
       var catalog = __cdbEx_catalog();
       if (!catalog) {

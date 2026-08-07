@@ -2,7 +2,7 @@
 /*
  * test-extra-settings-dom.mjs - headless-Chromium DOM tests for the "Extra"
  * settings area injected into the remote claude.ai Settings modal
- * (js/extra_settings_page.js, delivered by patches/add_feature_extra_settings.nim).
+ * (js/extra_settings_page.js, delivered by patches/core/add_feature_extra_settings.nim).
  *
  * The page script cannot be unit-tested against the real SPA - the markup is
  * remote and changes without a desktop release. What CAN be pinned is that the
@@ -160,7 +160,11 @@ const FIXTURE_BARE = dialog(`
 const DRIVER = String.raw`
 var SVGNS = "http://www.w3.org/2000/svg";
 var ICON_SEL = '[data-cds="Icon"]';
-var LABELS = ["Themes", "Features", "Deployment"];
+var LABELS = ["Themes", "Community", "Anthropic", "Deployment"];
+// Upstream's nav column is narrow and truncates, so the two long names are
+// shortened there and carried in a tooltip instead. The panels keep the full
+// name in their h1 - asserted in featuresPanel()/flagsPanel() below.
+var TOOLTIPS = { Community: "Community Features", Anthropic: "Anthropic Features" };
 
 function navbox() { return document.getElementById("navbox"); }
 
@@ -228,22 +232,37 @@ async function type(value) {
   await sleep(30);
 }
 
-// The Cowork glow switch lives in Features, above the GrowthBook description and
-// the restart notice - it is ours and it applies live.
+// Community Features: only our own switches, all of them live, plus the filter
+// bar over them. Nothing that needs a restart may appear here - that notice and
+// Anthropic's flag list moved to their own panel, asserted below.
 async function featuresPanel(featuresItem) {
   featuresItem.click();
   await sleep(120);
   const panel = document.querySelector(".cdbx-panel");
-  ok(!!panel, "the Features panel is mounted");
+  ok(!!panel, "the Community Features panel is mounted");
+  if (!panel) return;
+  ok(panel.querySelector(".cdbx-h1").textContent === "Community Features",
+     "the heading spells the full name out even though the nav row says Community: " +
+     panel.querySelector(".cdbx-h1").textContent);
+  ok(!panel.querySelector(".cdbx-notice"),
+     "no restart notice here - every switch in this panel applies live");
+  ok(!panel.querySelector(".cdbx-pathrow"),
+     "and no config file row - that belongs to the flag list");
 
-  // Panel tabs: the same renderToggleRow contract as the glow switch below,
-  // one row earlier in the real Features panel. (The diff-views row that sits
-  // between the two is not exercised in this file - this fixture's cdbExtra
-  // mock carries no diffViewsRead/Set, so renderToggleRow's partial-install
-  // guard silently skips it; see js/extra_settings_page.js.)
-  const tabsSel = ".cdbx-switch[aria-label=\"show the Code tab's side panels as tabs instead of a split layout\"]";
-  const tabs = panel && panel.querySelector(tabsSel);
-  ok(!!tabs, "the panel tabs switch renders in the Features panel");
+  // All four rows go through the same renderToggleRow contract, so the panel
+  // tabs one below stands in for the mechanics and the others are checked for
+  // the facts that differ: their title, their default, and their note.
+  const diff = panel.querySelector('.cdbx-switch[aria-label="show the diff view modes dropdown and the expand/collapse-all button"]');
+  ok(!!diff, "the diff view modes switch renders in the Community Features panel");
+  if (diff) {
+    ok(diff.closest(".cdbx-row").querySelector(".cdbx-id").textContent === "Diff view modes",
+       "titled Diff view modes");
+    ok(diff.getAttribute("aria-checked") === "false", "off by default - it reshapes a first-party panel");
+  }
+
+  const tabsSel = '.cdbx-switch[aria-label="show the Code tab\'s side panels as tabs instead of a split layout"]';
+  const tabs = panel.querySelector(tabsSel);
+  ok(!!tabs, "the panel tabs switch renders in the Community Features panel");
   if (tabs) {
     const tabsRow = tabs.closest(".cdbx-row");
     ok(tabsRow.querySelector(".cdbx-id").textContent === "Panel tabs", "titled Panel tabs");
@@ -257,51 +276,103 @@ async function featuresPanel(featuresItem) {
     ok(tabs.getAttribute("aria-checked") === "true", "the switch reflects the write");
   }
 
-  const glow = panel && panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']");
-  ok(!!glow, "the Cowork glow switch renders in the Features panel");
-  if (!glow) return;
-  ok(glow.getAttribute("aria-checked") === "false", "the glow switch reflects mode 'pulse'");
-  ok(!glow.disabled, "the glow switch is enabled when the .jsonc does not set it");
-
-  // It must sit ahead of the restart notice, which speaks only for the flags.
-  const notice = panel.querySelector(".cdbx-notice");
-  if (notice) {
-    const row = glow.closest(".cdbx-row");
-    ok(!!(row.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING),
-       "the glow row precedes the restart notice");
+  const glow = panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']");
+  ok(!!glow, "the Cowork glow switch renders in the Community Features panel");
+  if (glow) {
+    ok(glow.getAttribute("aria-checked") === "false", "the glow switch reflects mode 'pulse'");
+    ok(!glow.disabled, "the glow switch is enabled when the .jsonc does not set it");
+    glow.click();
+    await sleep(60);
+    ok(glow.getAttribute("aria-checked") === "true", "clicking the glow switch turns it on");
   }
 
-  glow.click();
-  await sleep(60);
-  ok(glow.getAttribute("aria-checked") === "true", "clicking the glow switch turns it on");
-
-  // Only the .jsonc is linked: it is the config file a human edits, and the one
-  // whose hand-set flag ids win over this page. The .json the switches are
-  // persisted to is internal bookkeeping and is deliberately not advertised.
-  const fileRows = panel.querySelectorAll(".cdbx-pathrow");
-  ok(fileRows.length === 1, "the Features panel links exactly one file (" + fileRows.length + ")");
-  if (fileRows.length === 1) {
-    const shown = fileRows[0].querySelector(".cdbx-pathlink").textContent;
-    ok(shown.endsWith("claude-desktop-extra.jsonc"), "and it is the .jsonc: " + shown);
-    ok(/win over this page/.test(fileRows[0].textContent),
-       "worded as what that file does, not as where the switches are saved: " + fileRows[0].textContent);
-    fileRows[0].querySelector(".cdbx-pathbtn").click();
-    await sleep(40);
-    ok(window.__revealCalls.indexOf("config-jsonc:folder") >= 0,
-       "its folder button works: " + window.__revealCalls.join(","));
+  // The theme picker: the only switch that is on with nothing on disk, because
+  // the shortcut is how a fresh install finds the themes at all.
+  const pickSel = ".cdbx-switch[aria-label='open the theme gallery with Ctrl+Shift+T']";
+  const pick = panel.querySelector(pickSel);
+  ok(!!pick, "the theme picker switch renders in the Community Features panel");
+  if (pick) {
+    const pickRow = pick.closest(".cdbx-row");
+    ok(pickRow.querySelector(".cdbx-id").textContent === "Theme picker", "titled Theme picker");
+    ok(pick.getAttribute("aria-checked") === "true",
+       "it is on when nothing on disk turned it off");
+    ok(pickRow.querySelector(".cdbx-state").textContent.indexOf("Ctrl+Shift+T opens the gallery") >= 0,
+       "the state line names the chord: " + pickRow.querySelector(".cdbx-state").textContent);
+    pick.click();
+    await sleep(60);
+    ok(window.__pickerCalls.length === 1 && window.__pickerCalls[0] === false,
+       "clicking it calls pickerSet(false) exactly once: " + JSON.stringify(window.__pickerCalls));
+    ok(pickRow.querySelector(".cdbx-state").textContent.indexOf("the shortcut does nothing") >= 0,
+       "and the state line follows the write");
+    pick.click();
+    await sleep(60);
+    ok(pick.getAttribute("aria-checked") === "true", "and it turns back on");
   }
-  ok(!panel.textContent.includes("claude-desktop-extra.json\n") &&
-     !Array.from(panel.querySelectorAll(".cdbx-pathlink"))
-        .some(function (a) { return a.textContent.endsWith("claude-desktop-extra.json"); }),
-     "the internal .json is not linked anywhere in the panel");
+
+  // This panel carries no restart notice, so every row has to say for itself
+  // that it needs no restart - verified per feature against the code that
+  // consumes each pref, see the comment above renderFeatures.
+  const notes = Array.from(panel.querySelectorAll(".cdbx-row .cdbx-note"));
+  ok(notes.length > 0 && notes.every(function (n) {
+       return n.textContent.toLowerCase().indexOf("applies live") >= 0;
+     }),
+     "every row's note says it applies live (" + notes.length + " rows): " +
+     notes.filter(function (n) { return n.textContent.toLowerCase().indexOf("applies live") < 0; })
+       .map(function (n) { return n.closest(".cdbx-row").querySelector(".cdbx-id").textContent; })
+       .join(",") || "all of them");
+
+  // --- the filter bar. Rows are HIDDEN, never re-rendered: a redraw would
+  // re-fire every row's async read and lose the state the user just set.
+  const box = panel.querySelector(".cdbx-search");
+  ok(!!box, "the panel has a filter bar");
+  if (box) {
+    ok(/^Filter \d+ features by name or description$/.test(box.placeholder),
+       "which says what it filters: " + box.placeholder);
+    const heads = Array.from(panel.querySelectorAll(".cdbx-sec-h"));
+    const visible = function () {
+      return heads.filter(function (h) { return h.style.display !== "none"; })
+        .map(function (h) { return h.textContent; });
+    };
+    ok(visible().length === heads.length, "every row is visible before typing");
+
+    await type("panel tabs");
+    ok(visible().join(",") === "Layout",
+       "a title match leaves only that section: " + visible().join(","));
+    ok(!!panel.querySelector(".cdbx-row .cdbx-id"), "the matching row is still in the DOM");
+    ok(panel.querySelectorAll(".cdbx-switch").length === heads.length,
+       "no row was re-rendered - all switches survive the filter (" +
+       panel.querySelectorAll(".cdbx-switch").length + ")");
+    ok(window.__panelTabsCalls.length === 1 && window.__pickerCalls.length === 2,
+       "and no read or write was fired again: " +
+       JSON.stringify(window.__panelTabsCalls) + JSON.stringify(window.__pickerCalls));
+
+    await type("ctrl+shift+t");
+    ok(visible().join(",") === "Shortcuts",
+       "a note match works too: " + visible().join(","));
+
+    await type("motion");
+    ok(visible().join(",") === "Motion", "so does a section match: " + visible().join(","));
+
+    await type("no such feature");
+    ok(visible().length === 0, "a needle nothing matches hides every row");
+    const empty = panel.querySelector(".cdbx-empty");
+    ok(!!empty && empty.style.display !== "none" &&
+       empty.textContent === "No feature matches that filter.",
+       "and the empty state says so");
+
+    await type("");
+    ok(visible().length === heads.length, "clearing the filter brings every row back");
+    ok(panel.querySelector(".cdbx-empty").style.display === "none", "and hides the empty state");
+  }
 
   // Locked: a hand-edited claude-desktop-extra.jsonc wins the startup merge, so
   // a fresh mount must render disabled with the "edit that file" affordance -
   // not just decline the write. Leave the panel and come back so renderFeatures
-  // re-reads panelTabsRead() against the updated fixture state.
+  // re-reads panelTabsRead()/pickerRead() against the updated fixture state.
   document.getElementById("row-account").click();
   await sleep(30);
   window.__panelTabsState = { ok: true, enabled: true, lockedByJsonc: true, source: "jsonc-locked" };
+  window.__pickerState = { ok: true, enabled: false, lockedByJsonc: true };
   featuresItem.click();
   await sleep(120);
   const panel2 = document.querySelector(".cdbx-panel");
@@ -316,6 +387,107 @@ async function featuresPanel(featuresItem) {
          .indexOf("claude-desktop-extra.jsonc") >= 0,
        "the state line says so too");
   }
+  const pick2 = panel2 && panel2.querySelector(pickSel);
+  ok(!!pick2, "the theme picker switch renders again after remounting the panel");
+  if (pick2) {
+    ok(pick2.getAttribute("aria-checked") === "false",
+       "an explicit false in the .jsonc turns the shortcut off");
+    ok(pick2.disabled, "and the switch is disabled because that file wins");
+    ok(pick2.title.indexOf("claude-desktop-extra.jsonc") >= 0,
+       "naming the file to edit: " + pick2.title);
+  }
+  window.__pickerState = { ok: true, enabled: true, lockedByJsonc: null };
+}
+
+// Anthropic Features: everything that used to sit below our own switches -
+// Anthropic's GrowthBook flags, the restart notice they need, the filter over
+// them and the one config file the panel links.
+async function flagsPanel(flagsItem) {
+  flagsItem.click();
+  await sleep(140);
+  const panel = document.querySelector(".cdbx-panel");
+  ok(!!panel, "the Anthropic Features panel is mounted");
+  if (!panel) return;
+  ok(panel.querySelector(".cdbx-h1").textContent === "Anthropic Features",
+     "the heading spells the full name out even though the nav row says Anthropic: " +
+     panel.querySelector(".cdbx-h1").textContent);
+  ok(!panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']"),
+     "our own switches stayed behind in Community Features");
+
+  // The restart notice speaks only for these flags, which is why it lives here.
+  const notice = panel.querySelector(".cdbx-notice");
+  ok(!!notice, "the restart notice is in this panel");
+  if (notice) {
+    ok(notice.textContent.indexOf("require a restart of Claude Desktop") >= 0,
+       "and says a restart is needed");
+    const restart = notice.querySelector(".cdbx-btn");
+    ok(!!restart && restart.textContent === "Restart now", "with the Restart now button");
+    if (restart) {
+      restart.click();
+      await sleep(40);
+      ok(window.__relaunchCalls === 1,
+         "clicking it calls appRelaunch exactly once (" + window.__relaunchCalls + ")");
+    }
+  }
+
+  // --- the flag list itself
+  const rows = function () { return Array.from(panel.querySelectorAll(".cdbx-list .cdbx-row")); };
+  const ids = function () {
+    return rows().map(function (r) { return r.querySelector(".cdbx-id").textContent; });
+  };
+  ok(ids().join(",") === "1001,1002,1003",
+     "every catalog entry got a row, in catalog order: " + ids().join(","));
+  const first = rows()[0];
+  ok(first.querySelector(".cdbx-state").textContent.indexOf("not in your account") >= 0,
+     "a flag the account payload does not carry says so: " +
+     first.querySelector(".cdbx-state").textContent);
+  ok(rows()[1].querySelector(".cdbx-switch").getAttribute("aria-checked") === "true",
+     "a flag the account has on renders on");
+
+  // Value-carrying flags are a read-only chip: a bare true would replace the
+  // server's value with something meaningless.
+  const valueRow = rows()[2];
+  ok(!!valueRow.querySelector(".cdbx-value"), "a value flag renders its value as a chip");
+  ok(!valueRow.querySelector(".cdbx-switch"), "and gets no switch at all");
+  ok(valueRow.querySelector(".cdbx-state").textContent.indexOf("read-only here") >= 0,
+     "the state line says why");
+
+  first.querySelector(".cdbx-switch").click();
+  await sleep(60);
+  ok(window.__flagCalls.length === 1 && window.__flagCalls[0] === "1001=true",
+     "flipping a flag writes it once: " + JSON.stringify(window.__flagCalls));
+  ok(!!first.querySelector(".cdbx-clear"), "and the clear-override affordance appears");
+
+  // --- the filter, over ids and notes both
+  await type("imagine");
+  ok(ids().join(",") === "1002", "the filter matches a note: " + ids().join(","));
+  await type("1003");
+  ok(ids().join(",") === "1003", "and an id: " + ids().join(","));
+  await type("no such flag");
+  ok(ids().length === 0 &&
+     panel.querySelector(".cdbx-list .cdbx-empty").textContent === "No flag matches that filter.",
+     "a needle nothing matches gets the empty state");
+  await type("");
+  ok(ids().length === 3, "clearing the filter brings every flag back");
+
+  // Only the .jsonc is linked: it is the config file a human edits, and the one
+  // whose hand-set flag ids win over this page. The .json the switches are
+  // persisted to is internal bookkeeping and is deliberately not advertised.
+  const fileRows = panel.querySelectorAll(".cdbx-pathrow");
+  ok(fileRows.length === 1, "the panel links exactly one file (" + fileRows.length + ")");
+  if (fileRows.length === 1) {
+    const shown = fileRows[0].querySelector(".cdbx-pathlink").textContent;
+    ok(shown.endsWith("claude-desktop-extra.jsonc"), "and it is the .jsonc: " + shown);
+    ok(/win over this page/.test(fileRows[0].textContent),
+       "worded as what that file does, not as where the switches are saved: " + fileRows[0].textContent);
+    fileRows[0].querySelector(".cdbx-pathbtn").click();
+    await sleep(40);
+    ok(window.__revealCalls.indexOf("config-jsonc:folder") >= 0,
+       "its folder button works: " + window.__revealCalls.join(","));
+  }
+  ok(!Array.from(panel.querySelectorAll(".cdbx-pathlink"))
+      .some(function (a) { return a.textContent.endsWith("claude-desktop-extra.json"); }),
+     "the internal .json is not linked anywhere in the panel");
 }
 
 // The Deployment panel: the 1P/3P switch writes the persisted deploymentMode and
@@ -724,12 +896,24 @@ async function run() {
        "both rows are children of our cloned list");
     ok(items.every(function (it) { return it.tagName === "LI"; }),
        "our rows are <li> - valid children of a <ul>");
-    ok(list.textContent.replace(/\s+/g, "") === LABELS.join(""),
+    ok(list.textContent.replace(/\s+/g, "") === LABELS.join("").replace(/\s+/g, ""),
        "no upstream text survived the clone: " + JSON.stringify(list.textContent.trim()));
 
     // --- the rows are clones of a real row of that same group.
     const sibling = document.getElementById("row-developer").parentElement;
     LABELS.forEach(function (label, i) { assertClonedRow(items[i], label, sibling); });
+
+    // --- the shortened labels carry their full name as a tooltip, and only they
+    //     do: a title repeating the label it sits on would be noise.
+    LABELS.forEach(function (label, i) {
+      const tip = controlOf(items[i]).getAttribute("title");
+      if (TOOLTIPS[label]) {
+        ok(tip === TOOLTIPS[label],
+           "the " + label + " row's tooltip carries the full name: " + JSON.stringify(tip));
+      } else {
+        ok(tip === null, "the " + label + " row carries no tooltip: " + JSON.stringify(tip));
+      }
+    });
 
     // --- selection migration, both directions.
     const upstreamSel = document.getElementById("row-general");
@@ -813,7 +997,8 @@ async function run() {
     if (kind === "real") {
       await themesPanel(items[0]);
       await featuresPanel(items[1]);
-      await deployPanel(items[2]);
+      await flagsPanel(items[2]);
+      await deployPanel(items[3]);
     }
     return;
   }
@@ -972,6 +1157,22 @@ window.__deployCalls = [];
 window.__revealCalls = [];
 window.__panelTabsCalls = [];
 window.__panelTabsState = { ok: true, enabled: false, lockedByJsonc: false, source: "default" };
+window.__diffViewsCalls = [];
+window.__diffViewsState = { ok: true, enabled: false, source: "default", defaultEnabled: false,
+  lockedByJsonc: false, key: "diffViewModes" };
+// The theme picker switch is the one row that is ON unless the config says
+// otherwise, so its fixture starts enabled with nothing on disk.
+window.__pickerCalls = [];
+window.__pickerState = { ok: true, enabled: true, lockedByJsonc: null };
+// A flag catalog shaped like the real one: two plain switches and one
+// value-carrying flag, which must render as a read-only chip instead.
+window.__flagCalls = [];
+window.__relaunchCalls = 0;
+window.__flagCatalog = [
+  { id: "1001", note: "Cowork sandbox sessions on the desktop", valueFlag: false, warn: "" },
+  { id: "1002", note: "Imagine mode in the composer", valueFlag: false, warn: "" },
+  { id: "1003", note: "Model routing weights", valueFlag: true, warn: "" }
+];
 window.__deployState = {
   ok: true,
   running: "1p",
@@ -1031,20 +1232,41 @@ window.cdbExtra = {
   themesApply: function () {
     return Promise.resolve({ ok: true, saved: "/home/u/.config/Claude/claude-desktop-extra.jsonc" });
   },
-  flagsCatalog: stub({ ok: true, count: 0, entries: [] }),
-  flagsRead: stub({ ok: true, storeSeen: true, server: {}, effective: {}, overridesJson: {}, overridesJsonc: {}, builtins: {},
+  flagsCatalog: function () {
+    return Promise.resolve({ ok: true, count: window.__flagCatalog.length, entries: window.__flagCatalog });
+  },
+  flagsRead: stub({ ok: true, storeSeen: true,
+    server: { "1002": { on: true, value: true }, "1003": { on: true, value: 3 } },
+    effective: { "1002": { on: true, value: true }, "1003": { on: true, value: 3 } },
+    overridesJson: {}, overridesJsonc: {}, builtins: {},
     paths: { json: "/home/u/.config/Claude/claude-desktop-extra.json",
              jsonc: "/home/u/.config/Claude/claude-desktop-extra.jsonc",
              userData: "/home/u/.config/Claude" } }),
-  flagsSet: stub({ ok: true }),
+  flagsSet: function (id, value) {
+    window.__flagCalls.push(id + "=" + value);
+    return Promise.resolve({ ok: true });
+  },
   flagsUnset: stub({ ok: true }),
-  appRelaunch: stub({ ok: true }),
+  appRelaunch: function () {
+    window.__relaunchCalls++;
+    return Promise.resolve({ ok: true });
+  },
   glowRead: stub({ ok: true, mode: "pulse", opacity: 0.55, defaultOpacity: 0.55, lockedByJsonc: null }),
   glowSet: stub({ ok: true, mode: "calm", windows: 1, path: "/tmp/x.json" }),
   panelTabsRead: function () { return Promise.resolve(window.__panelTabsState); },
   panelTabsSet: function (enabled) {
     window.__panelTabsCalls.push(enabled);
     return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/panel-tabs.json" });
+  },
+  diffViewsRead: function () { return Promise.resolve(window.__diffViewsState); },
+  diffViewsSet: function (enabled) {
+    window.__diffViewsCalls.push(enabled);
+    return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/diff-views.json", nudged: true });
+  },
+  pickerRead: function () { return Promise.resolve(window.__pickerState); },
+  pickerSet: function (enabled) {
+    window.__pickerCalls.push(enabled);
+    return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/picker.json" });
   },
   paths: stub({ ok: true, paths: {} }),
   deployRead: function () { return Promise.resolve(window.__deployState); },

@@ -31,7 +31,7 @@
 
 import std/[os, strutils]
 
-const FIX_JS = staticRead("../js/fix_epitaxy_autoscroll.js")
+const FIX_JS = staticRead("../../js/fix_epitaxy_autoscroll.js")
 
 proc escapeJs(s: string): string =
   result = s

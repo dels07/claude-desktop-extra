@@ -20,6 +20,12 @@
 # from the picker's own window are ignored -- the page handles the shortcut
 # itself so the same keystroke closes it.
 #
+# The shortcut can be switched off with `"themePicker": false` in
+# claude-desktop-extra.jsonc/.json (Settings -> Extra -> Community Features
+# writes it). The key is read from the config file on every press, so the switch
+# needs no restart; absent means enabled. That read is deliberately self-contained
+# -- the picker must keep working in a build without the Extra settings patch.
+#
 # The page and its preload are staticRead from js/ and written to
 #   <userData>/cdb-theme-picker/{picker.html,preload.js}
 # on every open (never stale after an upgrade), then loaded with loadFile +
@@ -32,8 +38,8 @@
 
 import std/[os, strutils, json]
 
-const PICKER_HTML = staticRead("../js/theme_picker_page.html")
-const PICKER_PRELOAD = staticRead("../js/theme_picker_preload.js")
+const PICKER_HTML = staticRead("../../js/theme_picker_page.html")
+const PICKER_PRELOAD = staticRead("../../js/theme_picker_preload.js")
 
 const PICKER_JS_HEAD =
   """;(function(){
@@ -51,6 +57,30 @@ var __cdbPk_preload="""
 const PICKER_JS_TAIL =
   """;
 var __cdbPk_win=null;
+// The opt-out, read straight from this package's config files. Self-contained on
+// purpose: the Extra settings patch writes the key but the shortcut must keep
+// working in a build that does not carry that patch, so nothing here depends on
+// it. Comment/trailing-comma stripper as in js/panel_tabs_main.js - whole quoted
+// strings are matched FIRST and passed through, or a "//" inside a string value
+// truncates the file.
+var __cdbPk_JSONC="claude-desktop-extra.jsonc",__cdbPk_JSON="claude-desktop-extra.json";
+function __cdbPk_strip(s){return String(s).replace(/("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/[^\n\r]*/g,function(m,str){return str?str:""}).replace(/,(\s*[}\]])/g,"$1")}
+function __cdbPk_key(file){try{var c=JSON.parse(__cdbPk_strip(_fs.readFileSync(file,"utf8"))||"{}");if(c&&typeof c==="object"&&!Array.isArray(c))return c.themePicker}catch(e){}return undefined}
+// Read on every press rather than cached: the settings page writes the file
+// directly, and a chord is rare enough that two stats cost nothing. The .jsonc is
+// the human-owned file and wins, like every other consumer of this config. Absent
+// in both means ENABLED, so an install that never touched the key keeps its
+// shortcut.
+function __cdbPk_enabled(){
+try{(globalThis.__cdbCfgMigrate||function(){})()}catch(e){}
+var d;try{d=_app.getPath("userData")}catch(e){return true}
+if(!d)return true;
+var j=__cdbPk_key(_path.join(d,__cdbPk_JSONC));
+if(typeof j==="boolean")return j;
+var k=__cdbPk_key(_path.join(d,__cdbPk_JSON));
+if(typeof k==="boolean")return k;
+return true;
+}
 function __cdbPk_api(){return globalThis.__cdbThemes||null}
 function __cdbPk_noEngine(){return {ok:false,error:"the custom themes patch did not install globalThis.__cdbThemes in this build"}}
 function __cdbPk_dir(){return _path.join(_app.getPath("userData"),"cdb-theme-picker")}
@@ -110,6 +140,7 @@ if(!input||input.type!=="keyDown")return;
 if(!input.control||!input.shift||input.alt||input.meta)return;
 if(!input.key||input.key.toLowerCase()!=="t")return;
 if(__cdbPk_isPicker(wc))return;
+if(!__cdbPk_enabled())return;
 __cdbPk_open();
 }catch(e){}
 });
@@ -125,10 +156,13 @@ const PICKER_JS =
 
 const EXPECTED_PATCHES = 1
 
-# Positive end-state markers (Rule 6): the build tag, the exported opener, and
-# the apply channel the page calls. An "already applied" run must find all three.
-const MARKERS =
-  ["__cdb_theme_picker", "globalThis.__cdbOpenThemePicker=", "\"cdb-themes:apply\""]
+# Positive end-state markers (Rule 6): the build tag, the exported opener, the
+# apply channel the page calls, and the opt-out gate on the hotkey. An "already
+# applied" run must find all four.
+const MARKERS = [
+  "__cdb_theme_picker", "globalThis.__cdbOpenThemePicker=", "\"cdb-themes:apply\"",
+  "if(!__cdbPk_enabled())return;",
+]
 
 proc markersPresent(s: string): int =
   for m in MARKERS:

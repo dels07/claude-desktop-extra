@@ -4,9 +4,33 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 ## 2026-08-07
 
+### Settings → Extra: our switches and Anthropic's flags are now two separate pages
+
+The **Features** page held two unrelated things: the handful of optional features this project adds, and Anthropic's own 134 rollout flags. They are now one page each.
+
+**Community Features** holds our switches - Diff view modes, Panel tabs, Calm the Cowork glow, and the new Theme picker hotkey - and gains the same filter box the flag list has, so a growing list stays quick to search. **Anthropic Features** holds the upstream flag list, the per-flag overrides and the "changes require a restart" notice with its Restart now button, unchanged. Nav order is Themes, Community Features, Anthropic Features, Deployment.
+
+The new **Theme picker hotkey** switch (config key `themePicker`, on by default) turns the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> gallery off for anyone who wants that shortcut back for something else. The theme list in Settings → Extra → Themes is unaffected.
+
+Nothing moves on disk: both `claude-desktop-extra.jsonc` (yours, wins) and `claude-desktop-extra.json` (written by the UI) keep the same keys in the same places.
+
+### The Cowork glow switch named the wrong config file
+
+When `coworkGlow` is set by hand, the switch locks itself and explains where the value came from - but it named `claude-desktop-bin.jsonc`, the filename from before the project was renamed. It now names `claude-desktop-extra.jsonc`, which is the file actually being read.
+
+### Patches are grouped by what they are for
+
+`patches/` was a flat directory of 45 `.nim` files where nothing distinguished a Linux bug fix from an optional feature. It is now three:
+
+- `patches/linux/` (32) - Linux compatibility. Always on, nothing to configure.
+- `patches/community/` (6) - optional features, each with a switch in Settings → Extra → Community Features.
+- `patches/core/` (7) - always-on infrastructure the other two build on: the Extra settings pages, the theme engine, the flag-override mechanism, the multi-profile plumbing.
+
+Patches still apply in basename order, so the split changes classification only, not behavior. `scripts/apply_patches.py` now pins the total in `EXPECTED_PATCH_COUNT` and refuses to run if discovery finds a different number - a patch cannot be added or lost without someone saying so. The README documents the recipe for adding a community feature.
+
 ### The Code tab's side panels can open as tabs instead of a split
 
-Diff, terminal, browser, files, artifacts and background tasks have always shared the panel area as a fixed split, each one shrinking to make room for its neighbours. A new **Panel tabs** switch (Settings → Extra → Features → Layout) turns that into a tab strip instead: each panel gets the full width of the panel area. Open panels the way you always have - the app's own toolbar buttons and its **Session actions** menu - and each one arrives as a new tab. <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd> jump straight to a tab, and closing one replays it through the panel's own close control, so panel teardown itself is unchanged. The chat column is unaffected.
+Diff, terminal, browser, files, artifacts and background tasks have always shared the panel area as a fixed split, each one shrinking to make room for its neighbours. A new **Panel tabs** switch (Settings → Extra → Community Features → Layout) turns that into a tab strip instead: each panel gets the full width of the panel area. Open panels the way you always have - the app's own toolbar buttons and its **Session actions** menu - and each one arrives as a new tab. <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd> jump straight to a tab, and closing one replays it through the panel's own close control, so panel teardown itself is unchanged. The chat column is unaffected.
 
 Switching tabs shows and hides panels rather than rebuilding them, so **every panel keeps its state**: the diff panel's expanded and collapsed files are still expanded and collapsed when you come back, and the terminal keeps its scrollback and its size. Upstream's own layout is never rewritten to switch - the panels you are not looking at are still in it, just hidden - which is also why a switch is instant instead of taking the second a rebuild used to.
 

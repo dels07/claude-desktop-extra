@@ -59,9 +59,9 @@ These files embed assumptions about upstream internals and **must be challenged 
 
 | File | What's fragile | Update workflow |
 |------|---------------|-----------------|
-| `patches/*.nim` | Regex patterns matching minified JS | Build fails → fix patterns → `make` → `node --check` |
+| `patches/{linux,community,core}/*.nim` | Regex patterns matching minified JS | Build fails → fix patterns → `make` → `node --check` |
 | `baseline/CLAUDE_FEATURE_FLAGS.md` | Function names, GrowthBook IDs, architecture details | Run Feature Flag Audit (Prompt 3 in update-prompt.md) |
-| `README.md` | Patch tables (grouped by why each patch exists), feature descriptions. Debug `rg` anchor patterns live in the patch sources themselves, not the README. **NOT** install command version numbers — those are updated automatically by CI. | Review after patches are fixed |
+| `README.md` | Patch tables (one per `patches/` subdirectory: Community features, Core infrastructure, Linux compatibility - links must point at `patches/<group>/<name>.nim`), feature descriptions. Debug `rg` anchor patterns live in the patch sources themselves, not the README. **NOT** install command version numbers - those are updated automatically by CI. | Review after patches are fixed |
 | `baseline/CLAUDE_BUILT_IN_MCP.md` | Built-in MCP server names, registration patterns | Check `registerInternalMcpServer` calls in new JS |
 | `js/extra_settings_main.js` (`__cdbEx_DEPLOY_KEYS`) | The managed-settings key catalog the Extra → Deployment panel renders, pinned from the bundle's own zod schema. A key upstream removes keeps being offered; a key it adds is missing. Also the faithful port of the 3p-dir resolver and the mode decision | `rg -ao 'flatKey:"[A-Za-z0-9_]+"' tmp/app.asar.contents/.vite/build/index.pre.js \| sort -u` and diff against the catalog; `node scripts/test-deployment-main.mjs` asserts the shape |
 | `baseline/PANEL_TABS_ANCHORS.md` | Panel-tabs DOM/fiber anchors: the row shape, `MAX_CHAIN_HOPS`, the literal `"chat"` tile id, the label->tileId map (upstream's `Browser` is tile `preview`), the Session-actions menu, and the runtime warnings that mean an anchor moved | Re-run the console recipes in that file against the new build; every `[cdb-tabs]` warning key listed there names the anchor that broke |
@@ -166,7 +166,7 @@ cd patches && make -j$(nproc) && cd ..
 # stub+chunks concatenation (what the orchestrator stages), not index.js alone:
 B=./tmp/app.asar.contents/.vite/build
 { cat $B/index.js; for c in $B/index.chunk-*.js; do printf '\n/*__CDB_SPLIT__%s__*/\n' "$(basename $c)"; cat "$c"; done; } > ./tmp/test-index.js
-patches/fix_quick_entry_position ./tmp/test-index.js
+patches/linux/fix_quick_entry_position ./tmp/test-index.js
 echo "Exit code: $?"
 ```
 
@@ -307,7 +307,7 @@ sudo pacman -U build/claude-desktop-extra-*.pkg.tar.zst
 ### 8. Commit Convention
 
 ```bash
-git add patches/*.nim js/*.js CHANGELOG.md
+git add patches/*/*.nim js/*.js CHANGELOG.md
 git commit -m "$(cat <<'EOF'
 Fix patch patterns for Claude Desktop vX.X.XXXX
 
@@ -328,14 +328,20 @@ git push
 ## File Structure
 
 ```
-patches/     # Nim patch sources (.nim) + Makefile, compiled to native binaries (ls patches/*.nim)
-js/          # Shared JS snippets embedded by Nim patches via staticRead
-scripts/     # Build, validation, and launcher scripts (ls scripts/)
-docs/        # Screenshots (chat, code, cowork, global UI)
-baseline/    # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md, PANEL_TABS_ANCHORS.md
+patches/           # Nim patch sources (.nim) + Makefile, compiled to native binaries (ls patches/*/*.nim)
+patches/linux/     #   Linux compatibility - always on, not user-configurable (32)
+patches/community/ #   Opt-in features, each with a switch in Settings -> Extra -> Community Features (6)
+patches/core/      #   Always-on infrastructure the rest builds on: the Extra settings pages, the theme
+                   #   engine, the GrowthBook override mechanism, multi-profile plumbing (7)
+js/                # Shared JS snippets embedded by Nim patches via staticRead ("../../js/..." from a patch)
+scripts/           # Build, validation, and launcher scripts (ls scripts/)
+docs/              # Screenshots (chat, code, cowork, global UI)
+baseline/          # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md, PANEL_TABS_ANCHORS.md
 ```
 
-Each patch has a `# @patch-target:` and `# @patch-type: nim` header. The Makefile compiles them to native binaries. The orchestrator (`scripts/apply_patches.py`) runs the binaries. Use `ls patches/*.nim` as the single source of truth for what exists.
+Each patch has a `# @patch-target:` and `# @patch-type: nim` header. The Makefile compiles them to native binaries. The orchestrator (`scripts/apply_patches.py`) discovers them recursively across the three subdirectories and applies them in **basename order** (the directory only classifies a patch, it does not order it). Use `ls patches/*/*.nim` as the single source of truth for what exists.
+
+`apply_patches.py` pins the total in `EXPECTED_PATCH_COUNT` and fails loud when discovery finds a different number - bump the constant in the same commit that adds or removes a patch. The README's "Adding your own feature" section documents the full recipe for a new opt-in feature (patch + config key + toggle row).
 
 ## Profile System (multi-instance)
 
@@ -347,10 +353,10 @@ Multiple Desktop instances can run side by side via named profiles. The launcher
 |----------|-----------|----------------------|
 | Electron userData | `--user-data-dir` flag in launcher | All `app.getPath("userData")` consumers auto-redirect |
 | Claude Code config | `CLAUDE_CONFIG_DIR` env exported by launcher | Honored by `@anthropic-ai/claude-code` CLI |
-| Quick Entry socket | `process.env.CLAUDE_PROFILE` read in JS | `patches/fix_quick_entry_cli_toggle.nim` |
+| Quick Entry socket | `process.env.CLAUDE_PROFILE` read in JS | `patches/core/fix_quick_entry_cli_toggle.nim` |
 | systemd scope | `${profile_suffix}` in launcher | `claude-desktop-launcher.sh` |
 | WM_CLASS / Wayland app_id | per-profile Electron binary (hardlink → reflink → copy fallback) | `~/.local/lib/claude-desktop/<APP_ID>-<name>` — must be a real file, not a symlink, because Electron derives its app identity from `/proc/self/exe` (the kernel resolves symlinks before reading) |
-| SSO callback routing | marker file written by JS hook on `shell.openExternal`; launcher reads marker to dispatch incoming `claude://` URL | `patches/fix_profile_url_routing.nim` (writer) + `claude-desktop-launcher.sh` URL-handler block (reader / re-exec) |
+| SSO callback routing | marker file written by JS hook on `shell.openExternal`; launcher reads marker to dispatch incoming `claude://` URL | `patches/core/fix_profile_url_routing.nim` (writer) + `claude-desktop-launcher.sh` URL-handler block (reader / re-exec) |
 
 **Rule when adding a new patch:** if it writes to a fixed user-level path, prefer `app.getPath("userData")` (auto-isolates) over `os.homedir()+"/.config/Claude"` (single-instance leak). If it opens a Unix socket or pipe that is owned by the Electron process itself, append `process.env.CLAUDE_PROFILE` to the path the same way `fix_quick_entry_cli_toggle.nim` does. If the socket is owned by a separate shared user-level daemon, do NOT suffix it — clients across all profiles need to connect to the same listener; profile isolation comes from per-profile state inherited via env. If the patch spawns a long-lived child process that holds state, propagate `process.env.CLAUDE_PROFILE` and `process.env.CLAUDE_CONFIG_DIR` (or accept that `child_process.spawn` inherits `process.env` by default — verify, don't assume).
 

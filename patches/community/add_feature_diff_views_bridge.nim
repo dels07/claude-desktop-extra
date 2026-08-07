@@ -15,7 +15,7 @@
 
 import std/[os, strutils]
 
-const BRIDGE_JS = staticRead("../js/diff_views_bridge.js")
+const BRIDGE_JS = staticRead("../../js/diff_views_bridge.js")
 
 # Positive end-state markers (Rule 6): the build tag and the exposed global.
 const MARKERS = ["__cdb_diff_views_bridge", "exposeInMainWorld(\"cdbDiffViews\""]

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * test-spinner-main.mjs - main-process tests for the theme engine injected by
- * patches/add_feature_custom_themes.nim: what it PUSHES into windows on a live theme
+ * patches/core/add_feature_custom_themes.nim: what it PUSHES into windows on a live theme
  * switch, and what __cdbThemes.list() reports.
  *
  * Why this exists: a green patch run only proves the IIFE was inserted. The behaviour

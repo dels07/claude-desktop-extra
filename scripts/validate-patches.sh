@@ -50,11 +50,16 @@ PASSED=0
 FAILED=0
 SKIPPED=0
 
-for patch_file in "$PATCHES_DIR"/*.nim "$PATCHES_DIR"/*.js; do
+# Patch sources live one level down, in the category subdirs (linux/, core/,
+# community/). The */ glob picks up any category without needing edits here.
+for patch_file in "$PATCHES_DIR"/*/*.nim "$PATCHES_DIR"/*/*.js; do
     [ -f "$patch_file" ] || continue
 
     TOTAL=$((TOTAL + 1))
     filename=$(basename "$patch_file")
+    # Compiled binary sits next to its source, so derive it from the full path -
+    # basename alone would drop the category subdir.
+    nim_bin="${patch_file%.nim}"
 
     # Extract metadata
     target=$(grep -m1 '@patch-target:' "$patch_file" 2>/dev/null | sed 's/.*@patch-target:[[:space:]]*//' | tr -d '\r' || echo "")
@@ -109,7 +114,6 @@ for patch_file in "$PATCHES_DIR"/*.nim "$PATCHES_DIR"/*.js; do
 
     # For Nim patches, run the compiled binary on a copy
     if [ "$patch_type" = "nim" ]; then
-        nim_bin="$PATCHES_DIR/${filename%.nim}"
         if [ ! -x "$nim_bin" ]; then
             echo "  Status: FAIL (compiled binary not found: $nim_bin)"
             FAILED=$((FAILED + 1))
@@ -149,7 +153,6 @@ for patch_file in "$PATCHES_DIR"/*.nim "$PATCHES_DIR"/*.js; do
     elif [ "$patch_type" = "nim-dir" ]; then
         # nim-dir patches take a directory argument and locate their
         # content-hashed target file inside it (e.g. ion-dist SPA bundles)
-        nim_bin="$PATCHES_DIR/${filename%.nim}"
         if [ ! -x "$nim_bin" ]; then
             echo "  Status: FAIL (compiled binary not found: $nim_bin)"
             FAILED=$((FAILED + 1))

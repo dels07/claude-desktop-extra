@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * test-picker-gaming.mjs - headless-Chromium tests for the theme picker page
- * (js/theme_picker_page.html, delivered by patches/add_feature_theme_picker.nim), focused
+ * (js/theme_picker_page.html, delivered by patches/community/add_feature_theme_picker.nim), focused
  * on how it GROUPS themes: gaming palettes get their own separated section, chosen by the
  * theme's category rather than by which tier it came from.
  *

@@ -120,7 +120,7 @@ const DEFAULT_PALETTES = '/home/patrickjaja/development/community-palettes';
 
 const OUT_JSON = path.join(REPO, 'js', 'community_themes.json');
 const OUT_SVG_DIR = path.join(REPO, 'themes', 'palettes');
-const THEME_PATCH = path.join(REPO, 'patches', 'add_feature_custom_themes.nim');
+const THEME_PATCH = path.join(REPO, 'patches', 'core', 'add_feature_custom_themes.nim');
 const SPINNERS_JSON = path.join(REPO, 'scripts', 'community-spinners.json');
 const GAMING_JSON = path.join(REPO, 'js', 'gaming_themes.json');
 

@@ -11,11 +11,11 @@
 
 import std/[os, strutils]
 
-const MAIN_JS = staticRead("../js/panel_tabs_main.js")
-const LAYOUT_JS = staticRead("../js/panel_tabs_layout.js")
-const STORE_JS = staticRead("../js/panel_tabs_store.js")
-const HARVEST_JS = staticRead("../js/panel_tabs_harvest.js")
-const PAGE_JS = staticRead("../js/panel_tabs_page.js")
+const MAIN_JS = staticRead("../../js/panel_tabs_main.js")
+const LAYOUT_JS = staticRead("../../js/panel_tabs_layout.js")
+const STORE_JS = staticRead("../../js/panel_tabs_store.js")
+const HARVEST_JS = staticRead("../../js/panel_tabs_harvest.js")
+const PAGE_JS = staticRead("../../js/panel_tabs_page.js")
 
 const MARKER = "__CDB_PANEL_TABS__"
 const PLACEHOLDER = "\"__CDB_TABS_PAGE_SRC__\""

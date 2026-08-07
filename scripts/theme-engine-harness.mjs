@@ -2,7 +2,7 @@
  * theme-engine-harness.mjs - shared plumbing for the theme/spinner test suites
  * (test-spinner-main.mjs, test-spinner-dom.mjs, test-picker-gaming.mjs).
  *
- * The theme engine is a JS IIFE that patches/add_feature_custom_themes.nim PREPENDS to
+ * The theme engine is a JS IIFE that patches/core/add_feature_custom_themes.nim PREPENDS to
  * the main bundle, so the only faithful way to test it is to run the real compiled patch
  * and execute what it produced. That is what buildInjectedModule() does: it applies the
  * patch binary to a file containing nothing but `"use strict";`, which leaves a
@@ -25,7 +25,7 @@ import { createRequire } from "node:module";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const SKIP_EXIT = 3;
-const PATCH_BIN = join(ROOT, "patches", "add_feature_custom_themes");
+const PATCH_BIN = join(ROOT, "patches", "core", "add_feature_custom_themes");
 
 export class Skip extends Error {}
 
@@ -34,13 +34,13 @@ export function buildInjectedModule() {
   if (!existsSync(PATCH_BIN)) {
     // Not compiled yet: try, but never make installing a toolchain this suite's problem.
     try {
-      execFileSync("make", ["-C", join(ROOT, "patches"), "add_feature_custom_themes"],
+      execFileSync("make", ["-C", join(ROOT, "patches"), "core/add_feature_custom_themes"],
         { stdio: "ignore" });
     } catch {}
   }
   if (!existsSync(PATCH_BIN)) {
-    throw new Skip("patches/add_feature_custom_themes is not compiled " +
-      "(run: make -C patches add_feature_custom_themes)");
+    throw new Skip("patches/core/add_feature_custom_themes is not compiled " +
+      "(run: make -C patches core/add_feature_custom_themes)");
   }
   try { chmodSync(PATCH_BIN, 0o755); } catch {}
   const dir = mkdtempSync(join(tmpdir(), "cdb-engine-"));

@@ -2,9 +2,11 @@
 """
 Apply all patches in patches/ to the extracted app directory.
 
-Discovers every file in patches/ with @patch-target and @patch-type headers.
-For Nim patches (@patch-type: nim), runs the compiled binary (same stem name,
-no extension). For replace patches, copies the file to the target location.
+Discovers every file in the patches/ category subdirectories (linux/, core/,
+community/) with @patch-target and @patch-type headers. For Nim patches
+(@patch-type: nim), runs the compiled binary (same stem name, no extension,
+sitting next to the source). For replace patches, copies the file to the
+target location.
 
 Target files are staged on tmpfs so each patch reads/writes the staged copy,
 and only one real disk write happens per target at the end.
@@ -23,6 +25,37 @@ import tempfile
 from pathlib import Path
 
 HEADER_RE = re.compile(r"@patch-(target|type):\s*(\S+)")
+
+# Patch sources live in category subdirectories, not flat in patches/.
+PATCH_SUBDIRS = ("linux", "core", "community")
+
+# Every patch source must be accounted for. If a bad glob, a stray file or a
+# forgotten `git mv` changes what gets discovered, the build must fail rather
+# than quietly ship a release with a patch missing. Bump this when you add or
+# remove a patch.
+EXPECTED_PATCH_COUNT = 45
+
+
+def discover_patch_files(patches_dir: Path):
+    """Every file under the category subdirs, sorted by BASENAME.
+
+    Sorting by basename (not by full path) keeps the application order
+    identical to the old flat `sorted(patches_dir.iterdir())` layout. That
+    order is load-bearing: 8 patches prepend to the staged bundle head, and
+    later patches' regexes match against text earlier ones injected. Sorting
+    by path instead would group by category and silently reorder them.
+    """
+    files = []
+    for sub in PATCH_SUBDIRS:
+        d = patches_dir / sub
+        if not d.is_dir():
+            print(
+                f"[ERROR] Missing patch category directory: {d}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        files.extend(p for p in d.iterdir() if p.is_file())
+    return sorted(files, key=lambda p: p.name)
 
 
 def parse_headers(path: Path):
@@ -175,23 +208,56 @@ def main():
         print(f"[ERROR] app_dir not found: {app_dir}", file=sys.stderr)
         sys.exit(1)
 
-    replace_jobs = []  # list[(patch_file, real_target)]
-    nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
-    skipped = []
+    stray = sorted(p.name for p in patches_dir.glob("*.nim"))
+    if stray:
+        print(
+            f"[ERROR] Patch source(s) sitting flat in {patches_dir} instead of a "
+            f"category subdir ({', '.join(PATCH_SUBDIRS)}): {', '.join(stray)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    for patch_file in sorted(patches_dir.iterdir()):
-        if not patch_file.is_file():
-            continue
+    # Parse headers first and assert the count BEFORE resolving any target, so
+    # "a patch went missing" is reported as such instead of surfacing as the
+    # first per-patch error further down.
+    sources = []  # list[(patch_file, target_spec, ptype)]
+    skipped = []
+    for patch_file in discover_patch_files(patches_dir):
         target_spec, ptype = parse_headers(patch_file)
         if not target_spec or not ptype:
             skipped.append(patch_file.name)
             continue
+        sources.append((patch_file, target_spec, ptype))
 
+    if skipped:
+        print(
+            f"  Skipping {len(skipped)} file(s) without patch headers: "
+            f"{', '.join(skipped)}"
+        )
+
+    if len(sources) != EXPECTED_PATCH_COUNT:
+        print(
+            f"\n[ERROR] Discovered {len(sources)} patch source(s), expected "
+            f"{EXPECTED_PATCH_COUNT}.\n"
+            f"        Searched: "
+            f"{', '.join(str(patches_dir / s) for s in PATCH_SUBDIRS)}\n"
+            "        If you added or removed a patch, update "
+            "EXPECTED_PATCH_COUNT in this script.\n"
+            "        Otherwise a patch went missing - do NOT ship this build.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    replace_jobs = []  # list[(patch_file, real_target)]
+    nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
+
+    for patch_file, target_spec, ptype in sources:
         if ptype == "replace":
             replace_jobs.append((patch_file, app_dir / target_spec))
         elif ptype == "nim":
-            # Look for compiled binary: same directory, same stem, no extension
-            nim_bin = patches_dir / patch_file.stem
+            # Look for compiled binary: same directory as the source (i.e. the
+            # category subdir), same stem, no extension
+            nim_bin = patch_file.with_suffix("")
             if not nim_bin.is_file() or not os.access(nim_bin, os.X_OK):
                 print(
                     f"[ERROR] Compiled binary not found for {patch_file.name}: "
@@ -222,12 +288,6 @@ def main():
             )
         else:
             print(f"  [WARN] Unknown @patch-type '{ptype}' for {patch_file.name}")
-
-    if skipped:
-        print(
-            f"  Skipping {len(skipped)} file(s) without patch headers: "
-            f"{', '.join(skipped)}"
-        )
 
     failed = False
 

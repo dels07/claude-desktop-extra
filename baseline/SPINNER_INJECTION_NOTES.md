@@ -1,7 +1,7 @@
 # Spinner / Brand-Glyph Replacement via Webview Injection
 
 **Status:** Implemented and shipped. The runtime engine is `js/spinner_injector.js`,
-installed by `patches/add_feature_custom_themes.nim`; every bundled palette carries a
+installed by `patches/core/add_feature_custom_themes.nim`; every bundled palette carries a
 spinner, and a theme switch re-themes the glyph live. These notes remain the design
 record: why injection rather than a bundle patch, how the glyph is identified, and what
 the failure modes are. The shape catalog is in
@@ -33,7 +33,7 @@ same way the theme patch already injects CSS.
 
 ### Reuse the existing injection hook
 
-`patches/add_feature_custom_themes.nim` already installs (lines ~218-229):
+`patches/core/add_feature_custom_themes.nim` already installs (lines ~218-229):
 
 ```js
 _app.on("web-contents-created", function(_ev, wc){
@@ -231,7 +231,7 @@ section while still being a built-in.
 ### Build-time validation
 
 Every bundled theme's spec is parsed and asserted while the Nim patch compiles
-(`validateSpinner` in `patches/add_feature_custom_themes.nim`): `spinner` must be an
+(`validateSpinner` in `patches/core/add_feature_custom_themes.nim`): `spinner` must be an
 object, `paths` must hold at least one real `{d: "..."}` entry, any `fill` must be a
 string, `animation` must be one of `pulse|spin|bounce|flip`, `viewBox` must be a string,
 and `paths2` must be present exactly when the animation is `flip`. A contract violation
@@ -527,7 +527,7 @@ matcher, `window.__cdbSpinner.managed()` reports how many glyphs the engine owns
 
 ## 8. How it was built
 
-- **Where:** `patches/add_feature_custom_themes.nim` owns it - the same patch that owns
+- **Where:** `patches/core/add_feature_custom_themes.nim` owns it - the same patch that owns
   the `web-contents-created`/`dom-ready` injection and reads `claude-desktop-bin.jsonc`.
   It `staticRead`s `js/spinner_injector.js` and serializes the active theme's `spinner`
   to JSON, prepended as `var __CDB_SPINNER_SPEC = <json|null>;`.

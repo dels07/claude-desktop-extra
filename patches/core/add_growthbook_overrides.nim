@@ -29,7 +29,7 @@
 import std/[os, strformat, strutils]
 import std/nre
 
-const OVERRIDES_JS = staticRead("../js/growthbook_overrides.js")
+const OVERRIDES_JS = staticRead("../../js/growthbook_overrides.js")
 const EXPECTED_PATCHES = 2
 
 proc apply*(input: string): string =

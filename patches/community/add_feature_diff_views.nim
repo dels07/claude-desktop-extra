@@ -12,9 +12,9 @@
 
 import std/[os, strutils]
 
-const MAIN_JS = staticRead("../js/diff_views_main.js")
-const PAGE_JS = staticRead("../js/diff_views_page.js")
-const EXPAND_JS = staticRead("../js/diff_views_expand.js")
+const MAIN_JS = staticRead("../../js/diff_views_main.js")
+const PAGE_JS = staticRead("../../js/diff_views_page.js")
+const EXPAND_JS = staticRead("../../js/diff_views_expand.js")
 
 const MARKER = "__CDB_DIFF_VIEWS__"
 const PLACEHOLDER = "\"__CDB_DV_PAGE_SRC__\""

@@ -23,7 +23,7 @@
 
 import std/[os, strutils]
 
-const BRIDGE_JS = staticRead("../js/extra_settings_bridge.js")
+const BRIDGE_JS = staticRead("../../js/extra_settings_bridge.js")
 
 const EXPECTED_PATCHES = 1
 

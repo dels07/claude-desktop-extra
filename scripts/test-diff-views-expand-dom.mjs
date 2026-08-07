@@ -3,7 +3,7 @@
  * test-diff-views-expand-dom.mjs - headless-Chromium DOM tests for the
  * expand/collapse-all button injected into the Code tab's diff panel
  * (js/diff_views_expand.js, mounted by js/diff_views_page.js, both delivered by
- * patches/add_feature_diff_views.nim).
+ * patches/community/add_feature_diff_views.nim).
  *
  * The diff panel is REMOTE claude.ai markup, so a clean patch run says nothing
  * about this feature working. What CAN be pinned is that the module derives
@@ -804,7 +804,7 @@ MutationObserver.prototype.disconnect = function () {
 </script>
 <script>
 // Exactly how the main process delivers it: ONE evaluated string, the expand
-// module first. Same concatenation as patches/add_feature_diff_views.nim.
+// module first. Same concatenation as patches/community/add_feature_diff_views.nim.
 eval(${JSON.stringify(EXPAND_JS + "\n;\n" + PAGE_JS)});
 </script>
 <script>

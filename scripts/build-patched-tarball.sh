@@ -378,7 +378,7 @@ chmod +x "$TREE_DIR/resources/claude-ssh/claude-ssh-"* 2>/dev/null || true
 # Apply ion-dist patches (the SPA has content-hashed filenames, so the patch finds
 # its target file dynamically by grepping for a unique pattern).
 ION_DIST_DIR="$TREE_DIR/resources/ion-dist"
-ION_DIST_PATCH="$PATCHES_DIR/fix_ion_dist_linux"
+ION_DIST_PATCH="$PATCHES_DIR/linux/fix_ion_dist_linux"
 if [ -d "$ION_DIST_DIR" ] && [ -x "$ION_DIST_PATCH" ]; then
     log_info "Applying ion-dist patches..."
     if ! "$ION_DIST_PATCH" "$ION_DIST_DIR"; then

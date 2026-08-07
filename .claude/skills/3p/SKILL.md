@@ -2,7 +2,7 @@
 name: 3p
 description: Reference for the 3p / enterprise / inference-gateway deployment of Claude Desktop on Linux - how /etc/claude-desktop/managed-settings.json is read, what "3p mode" changes (separate ~/.config/Claude-3p userData, hidden Chat tab, the false VM-download banner), how Cowork still runs under it, which hardcoded paths are safe vs split under the -3p switch, and how to verify it all from logs. Use when working on managed-settings.json, inferenceProvider/gateway/Bedrock/Vertex configs, the 3p setup SPA (ion-dist), the Claude-3p directory, or debugging managed-deployment Cowork.
 when_to_use: When the user mentions managed-settings.json (or the old enterprise.json), managed/MDM config, 3p / third-party deployment, inferenceProvider (gateway/bedrock/vertex/foundry/mantle), an inference gateway / LiteLLM, the Claude-3p config dir, the "Download a one-time package" banner, deploymentMode, the 3P setup window, or edits fix_marketplace_linux / fix_ion_dist_linux.
-paths: patches/fix_marketplace_linux.nim, patches/fix_ion_dist_linux.nim, baseline/ION.md
+paths: patches/linux/fix_marketplace_linux.nim, patches/linux/fix_ion_dist_linux.nim, baseline/ION.md
 ---
 
 # 3p / enterprise / inference-gateway deployment on Linux

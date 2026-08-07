@@ -6,7 +6,10 @@ window. Trimmed to the structurally relevant parts; **every class string is verb
 This markup is served by the **remote claude.ai SPA**, not by the bundle we patch, so it can change
 without a Claude Desktop release. It is the ground truth for:
 
-- `js/extra_settings_page.js` - injects the "Extra" nav group (Themes + Features) into this dialog
+- `js/extra_settings_page.js` - injects the "Extra" nav group into this dialog: **Themes**,
+  **Community**, **Anthropic**, **Deployment**, in that order. The middle two are shortened
+  because this column truncates; each carries its full name ("Community Features" /
+  "Anthropic Features") as a `title` tooltip on the row and as its panel's `h1`
 - `scripts/test-extra-settings-dom.mjs` - its fixtures are built from the shape below
 
 ## The facts the injection depends on

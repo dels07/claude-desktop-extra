@@ -8,7 +8,7 @@
 
 import std/[os, strutils]
 
-const BRIDGE_JS = staticRead("../js/panel_tabs_bridge.js")
+const BRIDGE_JS = staticRead("../../js/panel_tabs_bridge.js")
 
 # Positive end-state markers (Rule 6): the build tag and the exposed global.
 const MARKERS = ["__cdb_panel_tabs_bridge", "exposeInMainWorld(\"cdbTabs\""]

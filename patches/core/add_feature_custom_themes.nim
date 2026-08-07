@@ -87,16 +87,16 @@ import std/[os, strutils, json]
 # Renderer-side spinner installer (owned by the SPINNER agent). Embedded at compile
 # time and re-emitted as a JS string literal inside the IIFE; the runtime prepends the
 # per-theme spec and hands the whole thing to wc.executeJavaScript().
-const SPINNER_INJECTOR_JS = staticRead("../js/spinner_injector.js")
+const SPINNER_INJECTOR_JS = staticRead("../../js/spinner_injector.js")
 
 # Bundled community palette collection: { "<slug>": {name, light{}, dark{}} }.
 # Parsed at COMPILE time so a malformed or wrongly shaped file fails the build
 # instead of shipping a broken bundle.
-const COMMUNITY_THEMES_JSON = staticRead("../js/community_themes.json")
+const COMMUNITY_THEMES_JSON = staticRead("../../js/community_themes.json")
 
 # Bundled gaming palettes: { "<slug>": {name, category:"gaming", light{}, dark{},
 # spinner{}} }. Same compile-time gate as the community file, plus the category check.
-const GAMING_THEMES_JSON = staticRead("../js/gaming_themes.json")
+const GAMING_THEMES_JSON = staticRead("../../js/gaming_themes.json")
 
 # The spinner spec contract, enforced at build time for every bundled theme that
 # carries one. The runtime injector validates again (a user theme from the config

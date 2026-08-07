@@ -45,6 +45,15 @@
  *     dropdown per view" guard is visibility-aware (viewServedByDisplayedRow)
  *     rather than presence-in-document-aware; the latter left the fullscreen
  *     header with no dropdown while the mode still applied.
+ *   - AN INSTALL IS RE-VALIDATED ON EVERY SWEEP (added 2026-08-04). Upstream
+ *     REUSES the chrome-row DOM when it swaps which tile owns that row, and our
+ *     <select> is a foreign node React does not manage - so it survived the
+ *     row's contents being replaced and ended up in the in-app browser panel
+ *     (measured: "tileId=preview markers: [] wouldQualify: false ourDropdown:
+ *     TRUE"). revalidateInstalls() re-resolves each install's view through the
+ *     SAME resolveView()/qualifiesAsView() path the install used and removes any
+ *     dropdown whose containing view no longer qualifies. It only ever REMOVES;
+ *     it never tightens the ANY-OF marker rule above.
  *
  * HONEST AVAILABILITY (2026-07-31): "Latest turn" is only offered when the main
  * process reports a turn snapshot FOR THIS REPO (state().hasTurnSnapshot, now a
@@ -900,6 +909,80 @@
   }
 
   // ------------------------------------------------------------------ //
+  // Re-validation: a dropdown must not outlive its diff view              //
+  // ------------------------------------------------------------------ //
+  // DEFECT B (2026-08-04, measured live): the diff-scope dropdown turned up in
+  // the in-app browser/preview panel's toolbar row. With `preview` as the only
+  // mounted side tile the probe read
+  //     panel tileId=preview  markers: []  wouldQualify: false  ourDropdown: TRUE
+  // - i.e. the <select> was sitting in a panel our OWN qualification check
+  // rejects, so it was never mis-installed by a bad gate. It is a STALE
+  // LEFTOVER: upstream REUSES the chrome-row DOM when it swaps which tile owns
+  // that row, and our <select> is a foreign node React does not manage, so it
+  // survives the row's contents being replaced and rides along into whatever
+  // view now owns the row. Panel tabs made it easy to hit (one row serves
+  // several tiles in quick succession) but the bug is entirely ours.
+  //
+  // Nothing already here could catch it:
+  //   - pruneInstalls() only asks whether the row is still in the DOCUMENT,
+  //     and it is - it was reused, not removed.
+  //   - installOnCloseControl() settles an already-served row (row.__cdbDv with
+  //     both our nodes still inside it) BEFORE it re-resolves the view at all.
+  //     That is deliberate and must stay: a mode switch can legitimately empty
+  //     the diff, and re-qualifying there would read the emptied panel as "not
+  //     a diff view".
+  // So the re-validation belongs where the install LIST is - the sweep - and it
+  // has to be a POSITIVE re-qualification, never a "the node is still in the
+  // document" proxy, which is exactly what already failed.
+  //
+  // The view is re-resolved from the row's own live close control through the
+  // SAME resolveView() the install used, so the qualification rule stays in
+  // ONE place: no second marker set, no separate notion of "is a diff view".
+  //
+  // DELIBERATELY NOT TIGHTENED (this is the edge case that motivated the loose
+  // marker, see VIEW_MARKERS): qualification is ANY-OF, because a LARGE diff
+  // renders every file COLLAPSED and ".epitaxy-diff-panel" then does not exist
+  // at all - a real 12-file diff view legitimately shows only the per-file
+  // header marker. The empty-diff fallback (qualifiesAsEmptyDiffView) still
+  // counts as qualifying too. This function only ever removes an install whose
+  // containing view fails that EXISTING gate; it never adds a requirement.
+  //
+  // A row whose close control has gone is left alone: that is a half-rendered
+  // row, not a wrong one, and pruneInstalls() already owns the "row is gone"
+  // case. Torn down WHOLE via teardownRow(), so the row is left exactly as a
+  // never-installed row and a later sweep can reinstall cleanly if the view
+  // becomes a diff view again.
+  var staleDropLogs = 0;
+  var MAX_STALE_DROP_LOGS = 3;
+
+  function revalidateInstalls() {
+    pruneInstalls();
+    var out = [], dropped = 0, lastDesc = "";
+    for (var i = 0; i < installs.length; i++) {
+      var rec = installs[i];
+      // Our own expand button is a CLONE of the close control with that class
+      // stripped precisely so it is never re-discovered as one (see
+      // js/diff_views_expand.js), so this cannot pick up our own node.
+      var control = rec.row && rec.row.querySelector
+        ? rec.row.querySelector(CLOSE_CONTROL_SELECTOR) : null;
+      if (!control) { out.push(rec); continue; }
+      if (resolveView(control)) { out.push(rec); continue; }
+      var host = rec.row.closest ? rec.row.closest(VIEW_CONTAINER_SELECTOR) : null;
+      lastDesc = describeMarkers(host || document);
+      teardownRow(rec.row);
+      dropped++;
+    }
+    installs = out;
+    if (dropped && staleDropLogs < MAX_STALE_DROP_LOGS) {
+      staleDropLogs++;
+      console.warn("[cdb-dv] removed " + dropped + " stale dropdown(s): the view now holding " +
+        "the chrome row no longer qualifies as a diff view (upstream reused the row for " +
+        "another tile) - markers there: " + lastDesc + "; appliedMode=" + lastKnownMode);
+    }
+    return dropped;
+  }
+
+  // ------------------------------------------------------------------ //
   // Install                                                             //
   // ------------------------------------------------------------------ //
 
@@ -1010,6 +1093,12 @@
 
   function sweep() {
     if (!prefOn) return;    // switched off: nothing of ours may (re)appear
+    // DEFECT B (2026-08-04): re-validate what is ALREADY installed before
+    // installing anything new, so a dropdown left behind in a reused chrome row
+    // is gone within one sweep instead of staying on screen indefinitely.
+    // Before the install loop on purpose: dropping a stale install also frees
+    // that row to be re-served in this very pass if its view does qualify.
+    revalidateInstalls();
     var controls = document.querySelectorAll(CLOSE_CONTROL_SELECTOR);
     var rawMatchCount = controls.length;
     var installedKind = null;

@@ -2,6 +2,44 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-06
+
+### Panel tabs: the in-bar `+` menu is gone
+
+The `+` open-panel control in the tab strip has been removed, along with everything that
+supported it. It was parked behind a flag since 2026-08-05 ("quite quirky"); the flag and
+the code are now both deleted rather than carried. Open panels the way you always have -
+the app's own toolbar buttons and its **Session actions** menu - and each one still
+arrives as a new tab. The tab strip, <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd>, the
+per-tab close, the expand control and the held chat/panel boundary are unchanged.
+
+Worth knowing because it removes a behaviour rather than a button: the `+` needed to know
+which panels a session offered, and the only way to find that out was to open the app's
+own **Session actions** menu in the background and read it. That probe is gone. Nothing in
+this feature now presses a control the user did not press, and it no longer sets any
+attribute of its own on the page's root element. Panel-tab code that touches the app is
+down to reading the layout and clicking the active panel's own close/expand buttons.
+
+## 2026-08-05
+
+### The Code tab's side panels can open as tabs instead of a split
+
+Diff, terminal, browser, files, artifacts and background tasks have always shared the panel area as a fixed split, each one shrinking to make room for its neighbours. A new **Panel tabs** switch (Settings → Extra → Features → Layout) turns that into a tab strip instead: each panel gets the full width of the panel area. Open panels the way you always have - the app's own toolbar buttons and its **Session actions** menu - and each one arrives as a new tab. <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd> jump straight to a tab, and closing one replays it through the panel's own close control, so panel teardown itself is unchanged. The chat column is unaffected.
+
+Switching tabs shows and hides panels rather than rebuilding them, so **every panel keeps its state**: the diff panel's expanded and collapsed files are still expanded and collapsed when you come back, and the terminal keeps its scrollback and its size. Upstream's own layout is never rewritten to switch - the panels you are not looking at are still in it, just hidden - which is also why a switch is instant instead of taking the second a rebuild used to.
+
+The consequence worth knowing: a hidden panel keeps running. A live preview goes on rendering and a browser tab goes on loading in the background, where closing a split pane would have torn them down. That is what makes them instant to come back to, and it costs some CPU for a preview that never stops moving.
+
+**The chat/side boundary stays where you put it.** The panel area is sized as if it were a two-pane split - chat versus one panel - and that proportion is remembered per session, so opening or closing a panel no longer moves the boundary. Drag the divider between chat and the panel area to resize, exactly as before; where you drop it is where it stays, on every tab and after a reload.
+
+The tab bar carries the expand control, at its right edge. Expanding spans the active panel across the window, and it **stays** expanded while you switch tabs, so you can flick between two panels at full width. Upstream discards the other panels while one is expanded, so the panel you switch *to* while expanded comes back fresh - collapse first if you want to keep where you were. With many tabs open the chips scroll sideways while the expand control stays pinned at the right edge, so it is always reachable.
+
+Opening and closing panels does not disturb the layout. A panel the app has only just inserted is hidden before it can paint, rather than appearing as a second split for a few frames and then being tidied away, so the boundary holds still through the whole operation - measured at zero pixels of movement across every frame of an open and a close, where it previously jumped 165 px for around 90 ms each way.
+
+Off by default, and off is a complete retreat: the tab bar and its styling are removed and upstream's real split layout is simply there again, because it was never replaced. Nothing you had open is lost. Only the active tab and the chat/side proportion are remembered per session - which panels are open is upstream's own record, so opening, closing or reordering panels in its UI is reflected in the tabs.
+
+Because the Code tab is remote claude.ai code, the bar degrades rather than fights: if an update moves the internals it drives, it renders no bar and warns once, leaving the layout exactly as the app left it - and since it never rewrites that layout, the degraded state is just the stock split UI.
+
 ## 2026-08-03
 
 ### Launching from a panel or menu no longer freezes startx/xinit desktops

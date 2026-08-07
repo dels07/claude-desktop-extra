@@ -46,6 +46,17 @@ add_feature_diff_views: \
 
 add_feature_diff_views_bridge: ../js/diff_views_bridge.js
 
+# Panel tabs: the main-process half embeds all four page modules via staticRead,
+# so a change to any of them has to rebuild the binary.
+add_feature_panel_tabs: \
+  ../js/panel_tabs_main.js \
+  ../js/panel_tabs_layout.js \
+  ../js/panel_tabs_store.js \
+  ../js/panel_tabs_harvest.js \
+  ../js/panel_tabs_page.js
+
+add_feature_panel_tabs_bridge: ../js/panel_tabs_bridge.js
+
 # Theme patch embeds the spinner-reshape installer (swaps the loading-star SVG
 # for the active theme's custom shape) and the bundled community + gaming palette
 # collections via staticRead.

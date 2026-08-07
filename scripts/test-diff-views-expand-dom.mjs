@@ -607,6 +607,78 @@ async function run() {
   ok(document.getElementById("row").querySelector(".cdb-dv-toggle") !== null,
      "and they are back in the side panel's own row");
 }`,
+  // DEFECT B (2026-08-04, measured live): the diff-scope dropdown showed up in
+  // the in-app browser/preview panel's toolbar row. With `preview` as the only
+  // mounted side tile the probe read
+  //   panel tileId=preview  markers: []  wouldQualify: false  ourDropdown: TRUE
+  // - present in a panel diff-views' OWN qualification check rejects, so it was
+  // never a mis-install. Upstream REUSES the chrome-row DOM when it swaps which
+  // tile owns that row, and our <select> is a foreign node React does not
+  // manage, so it survives the row's contents being replaced and rides along.
+  // Reproduced structurally: the SAME row node stays put while the view around
+  // it stops being a diff view.
+  //
+  // The FIRST HALF is the regression guard for the edge case that motivated the
+  // loose marker (see VIEW_MARKERS in js/diff_views_page.js): FIXTURES.mixed IS
+  // the large-diff shape - every file COLLAPSED, so ".epitaxy-diff-panel" does
+  // not exist anywhere and only ONE of the four markers is present. A
+  // re-validation that demanded the expanded per-file content (or any ALL-of
+  // gate) would strip the dropdown off a real 12-file diff view, which is
+  // exactly the live bug the ANY-OF rule was introduced to fix on 2026-08-01.
+  stale: String.raw`
+async function run() {
+  var row = document.getElementById("row");
+  var view = document.getElementById("view");
+  ok(!!select(), "installed on the large-diff view (precondition)");
+  ok(document.querySelectorAll(".epitaxy-diff-panel").length === 0 &&
+     document.querySelectorAll("button.epitaxy-panel-subheader").length === 5,
+     "precondition: the all-files-collapsed shape - 5 per-file headers and ZERO " +
+     ".epitaxy-diff-panel - so only the LOOSE marker qualifies this view");
+
+  for (var i = 0; i < 3; i++) {
+    document.getElementById("filelist").appendChild(document.createElement("span"));
+    await sleep(600);                      // one debounced sweep each
+  }
+  ok(!!select() && row.contains(select()),
+     "STILL installed after three re-validating sweeps: a large diff with every " +
+     "file collapsed keeps its dropdown");
+  ok(document.querySelectorAll(".cdb-dv-select").length === 1,
+     "and exactly one - re-validation neither removed nor duplicated it: " +
+     document.querySelectorAll(".cdb-dv-select").length);
+
+  // Upstream now reuses this row for another tile: the ROW NODE stays, the view
+  // around it becomes an embedded browser surface with no diff marker at all.
+  var before = window.__disconnects;
+  document.getElementById("filelist").remove();
+  var frame = document.createElement("iframe");
+  frame.id = "preview";
+  view.appendChild(frame);
+  ok(row.querySelector(".cdb-dv-select") !== null,
+     "precondition: our <select> really did survive the view being replaced - " +
+     "that IS the defect, and no sweep has run yet");
+
+  await sleep(900);                        // let the debounced sweep re-validate
+
+  ok(document.querySelectorAll(".cdb-dv-select").length === 0,
+     "the stale dropdown is removed on the next sweep: " +
+     document.querySelectorAll(".cdb-dv-select").length);
+  ok(document.querySelectorAll(".cdb-dv-toggle").length === 0,
+     "and so is the expand button - the row is torn down WHOLE, not half");
+  ok(!row.__cdbDv && !row.__cdbDvUi,
+     "the row is left exactly as a never-installed row, so a later sweep could " +
+     "reinstall cleanly instead of doubling up");
+  ok(window.__disconnects >= before + 1,
+     "the expand half's observer was disconnected too (" + before + " -> " +
+     window.__disconnects + ")");
+  var staleLines = window.__diag.filter(function (d) { return /stale dropdown/.test(d); });
+  ok(staleLines.length === 1 && /removed 1 stale dropdown/.test(staleLines[0]),
+     "exactly one [cdb-dv] line names what happened: " + (staleLines.join(" | ") || "(none)"));
+
+  await sleep(900);
+  ok(document.querySelectorAll(".cdb-dv-select").length === 0,
+     "still gone a sweep later - the install loop does not put one back into a " +
+     "view that does not qualify");
+}`,
   destroy: String.raw`
 async function run() {
   var t = toggle();
@@ -772,7 +844,8 @@ const scenarios = [
   ["prune", FIXTURES.mixed, RUNS.prune, null],
   ["reattach", FIXTURES.mixed, RUNS.reattach, null],
   ["fullscreen", FIXTURES.mixed, RUNS.fullscreen, null],
-  ["destroy", FIXTURES.mixed, RUNS.destroy, null]
+  ["destroy", FIXTURES.mixed, RUNS.destroy, null],
+  ["stale", FIXTURES.mixed, RUNS.stale, null]
 ];
 
 let pass = 0;

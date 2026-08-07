@@ -250,6 +250,43 @@ else
 fi
 echo ""
 
+# A clean patch run says nothing about the panel tabs feature's LIVE behaviour:
+# whether the layout math is right, whether the page half mounts/removes its bar
+# from remote epitaxy DOM, or whether the main-process pref/IPC handlers behave.
+# These suites run the real modules (layout unit tests, page DOM tests in
+# headless Chromium, main-process pref/IPC tests with electron shimmed). Each
+# one exits 3 to say "a tool I need is not installed" - that is a SKIP, not a
+# FAIL.
+echo "-----------------------------------"
+echo "Panel tabs suites (node; DOM suite needs headless Chromium)"
+if command -v node >/dev/null 2>&1; then
+    for suite in test-panel-tabs-layout.mjs test-panel-tabs-dom.mjs test-panel-tabs-main.mjs; do
+        TOTAL=$((TOTAL + 1))
+        echo "  [$suite]"
+        pt_out=$(node "$SCRIPT_DIR/$suite" 2>&1) && pt_rc=0 || pt_rc=$?
+        echo "$pt_out" | sed 's/^/    /'
+        case $pt_rc in
+            0)
+                echo "    Status: PASS"
+                PASSED=$((PASSED + 1))
+                ;;
+            3)
+                echo "    Status: SKIP (the suite reported a missing tool)"
+                SKIPPED=$((SKIPPED + 1))
+                ;;
+            *)
+                echo "    Status: FAIL"
+                FAILED=$((FAILED + 1))
+                ;;
+        esac
+    done
+else
+    echo "  Status: SKIP (no node on this machine)"
+    TOTAL=$((TOTAL + 1))
+    SKIPPED=$((SKIPPED + 1))
+fi
+echo ""
+
 # A clean patch run says nothing about the theme engine's LIVE behaviour: whether a theme
 # switch re-themes the spinner in every open window (it used to need a restart), whether
 # a revert restores Claude's own glyph, or whether the picker groups gaming palettes by

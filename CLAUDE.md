@@ -64,6 +64,7 @@ These files embed assumptions about upstream internals and **must be challenged 
 | `README.md` | Patch tables (grouped by why each patch exists), feature descriptions. Debug `rg` anchor patterns live in the patch sources themselves, not the README. **NOT** install command version numbers — those are updated automatically by CI. | Review after patches are fixed |
 | `baseline/CLAUDE_BUILT_IN_MCP.md` | Built-in MCP server names, registration patterns | Check `registerInternalMcpServer` calls in new JS |
 | `js/extra_settings_main.js` (`__cdbEx_DEPLOY_KEYS`) | The managed-settings key catalog the Extra → Deployment panel renders, pinned from the bundle's own zod schema. A key upstream removes keeps being offered; a key it adds is missing. Also the faithful port of the 3p-dir resolver and the mode decision | `rg -ao 'flatKey:"[A-Za-z0-9_]+"' tmp/app.asar.contents/.vite/build/index.pre.js \| sort -u` and diff against the catalog; `node scripts/test-deployment-main.mjs` asserts the shape |
+| `baseline/PANEL_TABS_ANCHORS.md` | Panel-tabs DOM/fiber anchors: the row shape, `MAX_CHAIN_HOPS`, the literal `"chat"` tile id, the label->tileId map (upstream's `Browser` is tile `preview`), the Session-actions menu, and the runtime warnings that mean an anchor moved | Re-run the console recipes in that file against the new build; every `[cdb-tabs]` warning key listed there names the anchor that broke |
 | `baseline/ION.md` | ion-dist SPA bundle stats, patched patterns, config key schema | Run ion-dist checks (Prompt 4 in update-prompt.md) |
 | `baseline/PLATFORM_GATE_BASELINE.md` | darwin/win32 conditional counts, gate classifications (PATCHED/NATIVE/STUB/PORTABLE) | Run platform gate re-audit (Prompt 5 in update-prompt.md) |
 | `CHANGELOG.md` | Version-specific notes | Add new entry for each release. **One entry per day** - merge multiple changes into a single dated `##` section with subsections. **Keep notes informative, simple, and straight** - state what changed and the conclusion; don't dump verification minutiae, raw diffs, byte counts, or every minified identifier. The CHANGELOG is a reader's summary, not a debug log. |
@@ -331,7 +332,7 @@ patches/     # Nim patch sources (.nim) + Makefile, compiled to native binaries 
 js/          # Shared JS snippets embedded by Nim patches via staticRead
 scripts/     # Build, validation, and launcher scripts (ls scripts/)
 docs/        # Screenshots (chat, code, cowork, global UI)
-baseline/    # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md
+baseline/    # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md, PANEL_TABS_ANCHORS.md
 ```
 
 Each patch has a `# @patch-target:` and `# @patch-type: nim` header. The Makefile compiles them to native binaries. The orchestrator (`scripts/apply_patches.py`) runs the binaries. Use `ls patches/*.nim` as the single source of truth for what exists.

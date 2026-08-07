@@ -77,6 +77,17 @@
       return ipcRenderer.invoke("cdb-diff:pref-set", enabled === true);
     },
 
+    // Panel tabs (the Code tab's side-panel tab strip). BOTH channels are owned
+    // by patches/add_feature_panel_tabs.nim, not by the settings patch - the same
+    // cross-patch arrangement as diffViewsRead/Set above. set() takes a plain
+    // boolean and the main side re-validates the type.
+    panelTabsRead: function () {
+      return ipcRenderer.invoke("cdb-tabs:pref-read");
+    },
+    panelTabsSet: function (enabled) {
+      return ipcRenderer.invoke("cdb-tabs:pref-set", enabled === true);
+    },
+
     // Deployment mode (1P / 3P) and the third-party configuration the app boots
     // from. deployMode() takes only "1p"/"3p"; deploySet() only keys the main
     // side finds in its own catalog, and stored secrets never come back through

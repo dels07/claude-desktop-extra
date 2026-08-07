@@ -1023,6 +1023,39 @@
     });
   }
 
+  // --- layout: the Code tab's side-panel tabs -------------------------------
+  // Ours, applies live, and off by default: it reshapes how Anthropic's own tile
+  // layout is presented, so it is opt-in and this row is the way to ask for it.
+  function renderPanelTabsRow(panel) {
+    renderToggleRow(panel, {
+      section: "Layout",
+      title: "Panel tabs",
+      note: "Shows the Code tab's side panels as tabs instead of squeezing them side by side, so " +
+        "the panel you are using gets the full width. The rest stay open in the background and keep " +
+        "their place, so switching back is instant - that also means a live preview goes on " +
+        "running while you are not looking at it. Drag the divider to resize; opening or closing a " +
+        "panel will not move it. Off gives you the normal split layout back, and nothing you have " +
+        "open is lost.",
+      ariaLabel: "show the Code tab's side panels as tabs instead of a split layout",
+      read: "panelTabsRead",
+      write: "panelTabsSet",
+      lockFile: "claude-desktop-extra.jsonc",
+      // Opt-in: only an explicit true is on, so a shape we do not understand
+      // renders as off rather than claiming a feature that is not running.
+      isOn: function (res) { return res.enabled === true; },
+      describe: function (on) {
+        return on ? "on - side panels are tabs" : "off - stock split layout";
+      },
+      writeArg: function (next) { return next; },
+      toast: function (next) {
+        return next
+          ? "Panel tabs on - the Code tab's side panels are now a tab strip"
+          : "Panel tabs off - the side panels are split again";
+      },
+      errorPrefix: "Could not change panel tabs: "
+    });
+  }
+
   // --- motion: the pulsing Cowork glow ------------------------------------
   // Sits at the top of the Features panel rather than in its own nav entry - it
   // is ours and applies live, so it goes ahead of the GrowthBook flag list.
@@ -1195,6 +1228,7 @@
     // Ours, and they apply live - so they go above the GrowthBook description
     // and the restart notice, both of which only speak for the flag list.
     renderDiffViewsRow(panel);
+    renderPanelTabsRow(panel);
     renderGlowRow(panel);
 
     panel.appendChild(el("div", "cdbx-sub",

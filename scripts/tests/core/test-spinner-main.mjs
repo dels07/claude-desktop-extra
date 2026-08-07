@@ -14,11 +14,11 @@
  * they do not move when someone re-authors a bundled palette. The assertions that DO
  * cover bundled data (gaming category, bundled spinner specs) read js/*.json from disk.
  *
- * Usage: node scripts/test-spinner-main.mjs        (exit 3 = SKIP, 1 = FAIL)
+ * Usage: node scripts/tests/core/test-spinner-main.mjs        (exit 3 = SKIP, 1 = FAIL)
  */
 import {
   installEngine, mkWc, pushedSpec, lastSpinnerPayload, settle, readJson, reporter, runSuite,
-} from "./theme-engine-harness.mjs";
+} from "../lib/theme-engine-harness.mjs";
 
 const KEYFRAMES = ["cdbSpin", "cdbBounce", "cdbPulse", "cdbFlipA", "cdbFlipB"];
 

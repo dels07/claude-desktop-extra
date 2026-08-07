@@ -9,14 +9,14 @@
  * patch exposes (list/active/apply/close over IPC). The fixtures are ours - deliberately
  * one gaming theme per source tier, which is the case the bucketing has to get right.
  *
- * Usage: node scripts/test-picker-gaming.mjs [--png out.png] [--keep]
+ * Usage: node scripts/tests/community/test-picker-gaming.mjs [--png out.png] [--keep]
  *        (exit 3 = SKIP, 1 = FAIL)
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { ROOT, Skip, findChromium, dumpDom, readProbe, reporter, runSuite } from "./theme-engine-harness.mjs";
+import { ROOT, Skip, findChromium, dumpDom, readProbe, reporter, runSuite } from "../lib/theme-engine-harness.mjs";
 
 const argv = process.argv.slice(2);
 const KEEP = argv.includes("--keep");

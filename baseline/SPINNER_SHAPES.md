@@ -334,9 +334,9 @@ The engine's own behavior is covered by three suites that `scripts/validate-patc
 runs:
 
 ```bash
-node scripts/test-spinner-main.mjs    # main process: what a switch PUSHES to each window
-node scripts/test-spinner-dom.mjs     # headless Chromium: re-theme, revert, flip frames
-node scripts/test-picker-gaming.mjs   # picker sections incl. Gaming
+node scripts/tests/core/test-spinner-main.mjs        # main process: what a switch PUSHES to each window
+node scripts/tests/core/test-spinner-dom.mjs         # headless Chromium: re-theme, revert, flip frames
+node scripts/tests/community/test-picker-gaming.mjs  # picker sections incl. Gaming
 ```
 
 `test-spinner-dom.mjs` is the one that settles the questions a regex cannot: that a

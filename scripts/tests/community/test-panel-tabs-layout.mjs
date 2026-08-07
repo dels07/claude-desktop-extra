@@ -15,7 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 let pass = 0, fail = 0;
 const ok = (cond, name) => { if (cond) { pass++; console.log("  ok   " + name); }
   else { fail++; console.log("  FAIL " + name); } };

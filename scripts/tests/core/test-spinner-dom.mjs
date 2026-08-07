@@ -13,14 +13,14 @@
  * The page writes its own PASS/FAIL lines into <pre id="out">, which this script reads
  * back out of the dumped DOM.
  *
- * Usage: node scripts/test-spinner-dom.mjs [--keep]     (exit 3 = SKIP, 1 = FAIL)
+ * Usage: node scripts/tests/core/test-spinner-dom.mjs [--keep]     (exit 3 = SKIP, 1 = FAIL)
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ROOT, Skip, installEngine, mkWc, settle, findChromium, dumpDom, readProbe, reporter, runSuite,
-} from "./theme-engine-harness.mjs";
+} from "../lib/theme-engine-harness.mjs";
 
 const KEEP = process.argv.includes("--keep");
 

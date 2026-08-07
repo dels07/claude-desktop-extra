@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import Module from "node:module";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 let pass = 0, fail = 0;
 const ok = (c, n) => { if (c) { pass++; console.log("  ok   " + n); }
   else { fail++; console.log("  FAIL " + n); } };

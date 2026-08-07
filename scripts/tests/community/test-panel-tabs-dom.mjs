@@ -29,7 +29,7 @@
  *
  * Exits 3 when Chromium is missing so validate-patches.sh records SKIP.
  *
- * Usage: node scripts/test-panel-tabs-dom.mjs [--keep] [--chromium PATH]
+ * Usage: node scripts/tests/community/test-panel-tabs-dom.mjs [--keep] [--chromium PATH]
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -37,7 +37,7 @@ import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SRC = (f) => readFileSync(join(ROOT, "js/" + f), "utf8");
 
 const argv = process.argv.slice(2);

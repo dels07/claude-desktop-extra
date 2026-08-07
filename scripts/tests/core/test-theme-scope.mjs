@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   installEngine, mkWc, settle, findChromium, dumpDom, readProbe, reporter, runSuite, Skip,
-} from "./theme-engine-harness.mjs";
+} from "../lib/theme-engine-harness.mjs";
 
 // A theme with a distinct hue per mode and per token, so a wrong resolution can never
 // look like a right one. Values stay in the "H S% L%" form upstream's

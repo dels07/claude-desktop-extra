@@ -28,6 +28,12 @@ When `coworkGlow` is set by hand, the switch locks itself and explains where the
 
 Patches still apply in basename order, so the split changes classification only, not behavior. `scripts/apply_patches.py` now pins the total in `EXPECTED_PATCH_COUNT` and refuses to run if discovery finds a different number - a patch cannot be added or lost without someone saying so. The README documents the recipe for adding a community feature.
 
+### Feature tests are grouped the same way, and CI actually runs them
+
+The ten feature test harnesses sat flat in `scripts/` and nothing ever ran them - they were manual tools, so a broken feature only surfaced after a release. They now sit beside the patches they cover, in `scripts/tests/community/` (5) and `scripts/tests/core/` (5), with the shared plumbing in `scripts/tests/lib/`.
+
+A new `scripts/run-feature-tests.sh` runs them all, reports PASS / FAIL / SKIP per harness, and fails the run on any failure; `scripts/run-feature-tests.sh community` runs one group. Like `EXPECTED_PATCH_COUNT`, it pins `EXPECTED_TEST_HARNESSES` and refuses to run if discovery finds a different number, so a harness cannot go missing quietly. CI runs the script in the `lint-scripts` job, where the Nim patch binaries the tests need have just been compiled - on every pull request and every release. `scripts/validate-patches.sh` now delegates to the same script instead of keeping its own copy of the suite list.
+
 ### CI: the smoke test no longer fails on its own cleanup
 
 The smoke test could report a pass and then fail the job anyway: Electron's shutdown crashes in headless containers, and crash reporting kept writing into the temporary profile while the test was deleting it. Cleanup now waits for the process tree to end and retries the delete, and a cleanup hiccup can no longer override the test verdict.

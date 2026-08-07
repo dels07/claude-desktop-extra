@@ -2,7 +2,7 @@
  * panel_tabs_layout.js - PURE tile-tree READERS for the panel tabs feature.
  * No DOM, no fiber, no side effects: this is the piece most likely to need
  * editing when upstream's node shape moves, so it is isolated and unit-tested
- * by scripts/test-panel-tabs-layout.mjs.
+ * by scripts/tests/community/test-panel-tabs-layout.mjs.
  *
  * v2 (2026-08-04): the tree BUILDERS are gone. We no longer write upstream's
  * tileLayout at all - tabs are switched by toggling a CSS attribute on the

@@ -1,6 +1,7 @@
 /*
  * theme-engine-harness.mjs - shared plumbing for the theme/spinner test suites
- * (test-spinner-main.mjs, test-spinner-dom.mjs, test-picker-gaming.mjs).
+ * (core/test-spinner-main.mjs, core/test-spinner-dom.mjs, core/test-theme-scope.mjs,
+ * community/test-picker-gaming.mjs).
  *
  * The theme engine is a JS IIFE that patches/core/add_feature_custom_themes.nim PREPENDS to
  * the main bundle, so the only faithful way to test it is to run the real compiled patch
@@ -23,7 +24,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 export const SKIP_EXIT = 3;
 const PATCH_BIN = join(ROOT, "patches", "core", "add_feature_custom_themes");
 

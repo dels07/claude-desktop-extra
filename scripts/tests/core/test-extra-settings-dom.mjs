@@ -27,7 +27,7 @@
  * `chromium --headless --dump-dom`, and the assertions the page ran are read
  * back out of the dumped DOM.
  *
- * Usage: node scripts/test-extra-settings-dom.mjs [--keep] [--chromium PATH]
+ * Usage: node scripts/tests/core/test-extra-settings-dom.mjs [--keep] [--chromium PATH]
  */
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const PAGE_JS = readFileSync(join(ROOT, "js/extra_settings_page.js"), "utf8");
 const PAGE_CSS = readFileSync(join(ROOT, "js/extra_settings_page.css"), "utf8");
 

@@ -10,7 +10,7 @@ without a Claude Desktop release. It is the ground truth for:
   **Community**, **Anthropic**, **Deployment**, in that order. The middle two are shortened
   because this column truncates; each carries its full name ("Community Features" /
   "Anthropic Features") as a `title` tooltip on the row and as its panel's `h1`
-- `scripts/test-extra-settings-dom.mjs` - its fixtures are built from the shape below
+- `scripts/tests/core/test-extra-settings-dom.mjs` - its fixtures are built from the shape below
 
 ## The facts the injection depends on
 
@@ -51,7 +51,7 @@ class counts only. Read it first; it names the anchor that was lost:
 
 Re-capture the nav (DevTools on the mainView, copy the `nav[aria-label="Settings"]` outer HTML plus the
 content pane's first two levels), update this file, then refit the fixtures in
-`scripts/test-extra-settings-dom.mjs` against it.
+`scripts/tests/core/test-extra-settings-dom.mjs` against it.
 
 ## Capture
 

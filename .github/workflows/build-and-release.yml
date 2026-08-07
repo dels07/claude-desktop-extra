@@ -367,6 +367,17 @@ jobs:
           echo "=== Checking Nim patch syntax (compile check) ==="
           bash scripts/compile-nim-patches.sh
 
+      - name: Run feature test harnesses
+        run: |
+          # A clean patch run proves the patches APPLIED, not that the features
+          # BEHAVE. The harnesses under scripts/tests/{community,core}/ run the
+          # real injected engine (electron shimmed) and the real pages in the
+          # headless Chrome this runner already ships. They need no npm package;
+          # the main-process suites need the patch binaries the previous step
+          # just compiled, which is why this lands here and not in a job of its
+          # own. A harness that cannot find a tool exits 3 and is reported SKIP.
+          bash scripts/run-feature-tests.sh
+
       - name: Guard against sibling-file no-op patches
         run: |
           # A patch can only reliably touch its single @patch-target (the

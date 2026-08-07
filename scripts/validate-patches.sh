@@ -182,29 +182,29 @@ for patch_file in "$PATCHES_DIR"/*/*.nim "$PATCHES_DIR"/*/*.js; do
     echo ""
 done
 
-# The "Extra" settings area is injected into the REMOTE claude.ai Settings modal,
-# so applying cleanly says nothing about it rendering correctly. The DOM suite
-# runs its page half against fixtures in headless Chromium. Skipped rather than
-# failed where no browser is installed - it needs no npm package, only a chrome.
+# A clean patch run says nothing about the features' LIVE behaviour: whether the
+# theme engine re-themes every open window, whether the picker groups its
+# sections, whether the panel tabs bar mounts into remote epitaxy DOM, whether
+# the "Extra" settings area renders, or whether the Deployment panel writes the
+# file the 1P/3P bootstrap reads. The feature test harnesses under
+# scripts/tests/{community,core}/ cover exactly that, and scripts/run-feature-tests.sh
+# is the single place that knows which ones exist (it also runs in CI) - so this
+# script delegates rather than keeping a second, driftable copy of the list.
 echo "-----------------------------------"
-echo "Extra settings DOM suite (headless Chromium)"
-if command -v node >/dev/null 2>&1 && {
-        command -v chromium >/dev/null 2>&1 ||
-        command -v chromium-browser >/dev/null 2>&1 ||
-        command -v google-chrome-stable >/dev/null 2>&1 ||
-        command -v google-chrome >/dev/null 2>&1; }; then
+echo "Feature test harnesses (scripts/run-feature-tests.sh)"
+if command -v node >/dev/null 2>&1; then
     TOTAL=$((TOTAL + 1))
-    # The NODE exit status decides, never the pipeline's: `node ... | sed`
+    # The RUNNER's exit status decides, never the pipeline's: `runner | sed`
     # reports sed's status, which is always 0.
-    ES_LOG="$(mktemp)"
-    if node "$(dirname "$0")/test-extra-settings-dom.mjs" >"$ES_LOG" 2>&1; then
-        ES_RC=0
+    FT_LOG="$(mktemp)"
+    if "$SCRIPT_DIR/run-feature-tests.sh" >"$FT_LOG" 2>&1; then
+        FT_RC=0
     else
-        ES_RC=$?
+        FT_RC=$?
     fi
-    sed 's/^/  /' "$ES_LOG"
-    rm -f "$ES_LOG"
-    if [ "$ES_RC" -eq 0 ]; then
+    sed 's/^/  /' "$FT_LOG"
+    rm -f "$FT_LOG"
+    if [ "$FT_RC" -eq 0 ]; then
         echo "  Status: PASS"
         PASSED=$((PASSED + 1))
     else
@@ -212,151 +212,11 @@ if command -v node >/dev/null 2>&1 && {
         FAILED=$((FAILED + 1))
     fi
 else
-    echo "  Status: SKIP (no node and/or chromium on this machine)"
-    SKIPPED=$((SKIPPED + 1))
-fi
-echo ""
-
-# The expand/collapse-all button drives REMOTE epitaxy markup, so applying
-# cleanly says nothing about it landing in the right place or respecting
-# upstream's aria-expanded contract. Same headless-Chromium approach, no npm.
-echo "-----------------------------------"
-echo "Diff views expand/collapse-all DOM suite (headless Chromium)"
-if command -v node >/dev/null 2>&1 && {
-        command -v chromium >/dev/null 2>&1 ||
-        command -v chromium-browser >/dev/null 2>&1 ||
-        command -v google-chrome-stable >/dev/null 2>&1 ||
-        command -v google-chrome >/dev/null 2>&1; }; then
-    TOTAL=$((TOTAL + 1))
-    # The NODE exit status decides, never the pipeline's. `node ... | sed` reports
-    # sed's status, which is always 0, so this block used to print PASS even when
-    # every assertion in the suite failed. Capture, print indented, then test the
-    # SAVED status.
-    DV_LOG="$(mktemp)"
-    if node "$(dirname "$0")/test-diff-views-expand-dom.mjs" >"$DV_LOG" 2>&1; then
-        DV_RC=0
-    else
-        DV_RC=$?
-    fi
-    sed 's/^/  /' "$DV_LOG"
-    rm -f "$DV_LOG"
-    if [ "$DV_RC" -eq 0 ]; then
-        echo "  Status: PASS"
-        PASSED=$((PASSED + 1))
-    else
-        echo "  Status: FAIL"
-        FAILED=$((FAILED + 1))
-    fi
-else
-    echo "  Status: SKIP (no node and/or chromium on this machine)"
-    SKIPPED=$((SKIPPED + 1))
-fi
-echo ""
-
-# A clean patch run says nothing about the panel tabs feature's LIVE behaviour:
-# whether the layout math is right, whether the page half mounts/removes its bar
-# from remote epitaxy DOM, or whether the main-process pref/IPC handlers behave.
-# These suites run the real modules (layout unit tests, page DOM tests in
-# headless Chromium, main-process pref/IPC tests with electron shimmed). Each
-# one exits 3 to say "a tool I need is not installed" - that is a SKIP, not a
-# FAIL.
-echo "-----------------------------------"
-echo "Panel tabs suites (node; DOM suite needs headless Chromium)"
-if command -v node >/dev/null 2>&1; then
-    for suite in test-panel-tabs-layout.mjs test-panel-tabs-dom.mjs test-panel-tabs-main.mjs; do
-        TOTAL=$((TOTAL + 1))
-        echo "  [$suite]"
-        pt_out=$(node "$SCRIPT_DIR/$suite" 2>&1) && pt_rc=0 || pt_rc=$?
-        echo "$pt_out" | sed 's/^/    /'
-        case $pt_rc in
-            0)
-                echo "    Status: PASS"
-                PASSED=$((PASSED + 1))
-                ;;
-            3)
-                echo "    Status: SKIP (the suite reported a missing tool)"
-                SKIPPED=$((SKIPPED + 1))
-                ;;
-            *)
-                echo "    Status: FAIL"
-                FAILED=$((FAILED + 1))
-                ;;
-        esac
-    done
-else
     echo "  Status: SKIP (no node on this machine)"
     TOTAL=$((TOTAL + 1))
     SKIPPED=$((SKIPPED + 1))
 fi
 echo ""
-
-# A clean patch run says nothing about the theme engine's LIVE behaviour: whether a theme
-# switch re-themes the spinner in every open window (it used to need a restart), whether
-# a revert restores Claude's own glyph, or whether the picker groups gaming palettes by
-# category, or whether the theme survives the scope upstream re-defines --bg-100 in.
-# These suites run the REAL injected engine (electron shimmed) and the real picker page /
-# injector / stylesheet in headless Chromium. Each one exits 3 to say "a tool I need is
-# not installed" - that is a SKIP, not a FAIL.
-# The Deployment panel writes the files the app's 1P/3P bootstrap reads. A green
-# patch run proves nothing about WHICH file got written, so this suite runs the
-# real handlers (electron shimmed) against a temporary profile.
-echo "-----------------------------------"
-echo "Deployment mode suite (node)"
-if command -v node >/dev/null 2>&1; then
-    TOTAL=$((TOTAL + 1))
-    deploy_out=$(node "$SCRIPT_DIR/test-deployment-main.mjs" 2>&1) && deploy_rc=0 || deploy_rc=$?
-    echo "$deploy_out" | sed 's/^/  /'
-    case $deploy_rc in
-        0)
-            echo "  Status: PASS"
-            PASSED=$((PASSED + 1))
-            ;;
-        3)
-            echo "  Status: SKIP (the suite reported a missing tool)"
-            SKIPPED=$((SKIPPED + 1))
-            ;;
-        *)
-            echo "  Status: FAIL"
-            FAILED=$((FAILED + 1))
-            ;;
-    esac
-else
-    echo "  Status: SKIP (no node on this machine)"
-    TOTAL=$((TOTAL + 1))
-    SKIPPED=$((SKIPPED + 1))
-fi
-echo ""
-
-echo "-----------------------------------"
-echo "Theme engine suites (node + headless Chromium)"
-if command -v node >/dev/null 2>&1; then
-    for suite in test-spinner-main.mjs test-spinner-dom.mjs test-picker-gaming.mjs test-theme-scope.mjs; do
-        TOTAL=$((TOTAL + 1))
-        echo "  [$suite]"
-        suite_out=$(node "$SCRIPT_DIR/$suite" 2>&1) && suite_rc=0 || suite_rc=$?
-        echo "$suite_out" | sed 's/^/    /'
-        case $suite_rc in
-            0)
-                echo "    Status: PASS"
-                PASSED=$((PASSED + 1))
-                ;;
-            3)
-                echo "    Status: SKIP (the suite reported a missing tool)"
-                SKIPPED=$((SKIPPED + 1))
-                ;;
-            *)
-                echo "    Status: FAIL"
-                FAILED=$((FAILED + 1))
-                ;;
-        esac
-        echo ""
-    done
-else
-    echo "  Status: SKIP (no node on this machine)"
-    TOTAL=$((TOTAL + 4))
-    SKIPPED=$((SKIPPED + 4))
-    echo ""
-fi
 
 echo "==================================="
 echo "  Summary"

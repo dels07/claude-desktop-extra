@@ -38,7 +38,7 @@
  * a run that silently shrank its assertion count would otherwise look exactly
  * like one that exercised everything.
  *
- * Usage: node scripts/test-diff-views-expand-dom.mjs [--keep] [--chromium PATH]
+ * Usage: node scripts/tests/community/test-diff-views-expand-dom.mjs [--keep] [--chromium PATH]
  */
 
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, globSync } from "node:fs";
@@ -47,7 +47,7 @@ import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const EXPAND_JS = readFileSync(join(ROOT, "js/diff_views_expand.js"), "utf8");
 const PAGE_JS = readFileSync(join(ROOT, "js/diff_views_page.js"), "utf8");
 

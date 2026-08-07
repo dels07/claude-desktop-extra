@@ -43,7 +43,7 @@
  *   4. The installer logs one sanitized DOM-shape line (tag names and class
  *      COUNTS) to logs/claude-patches.log: that line, together with the capture
  *      above, is the ground truth to re-fit this file and
- *      scripts/test-extra-settings-dom.mjs against when the remote SPA changes.
+ *      scripts/tests/core/test-extra-settings-dom.mjs against when the remote SPA changes.
  *
  * Upstream content is hidden, never removed: the detected content pane keeps its
  * node and only gets display:none while our panel is mounted next to it, and it

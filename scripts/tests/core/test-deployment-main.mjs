@@ -16,7 +16,7 @@
  * over a file holding nothing but `"use strict";`, which leaves a standalone
  * CommonJS module with our IIFE and nothing else. electron is shimmed.
  *
- * Usage: node scripts/test-deployment-main.mjs      (exit 3 = SKIP, 1 = FAIL)
+ * Usage: node scripts/tests/core/test-deployment-main.mjs      (exit 3 = SKIP, 1 = FAIL)
  */
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, chmodSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -25,7 +25,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const PATCH_BIN = join(ROOT, "patches", "core", "add_feature_extra_settings");
 const SKIP_EXIT = 3;
 const KEEP = "__cdb_unchanged__";

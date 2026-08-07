@@ -459,9 +459,9 @@ step-by-step recipe.
 
 The runtime match is inherently fragile (remote-rendered, version-sensitive) and cannot be
 validated from the bundle alone, so it is checked in the running app. Three suites cover
-the parts that are checkable offline - `scripts/test-spinner-main.mjs` (what a switch
-pushes into each window), `scripts/test-spinner-dom.mjs` (re-theme, revert and the flip
-frames in headless Chromium) and `scripts/test-picker-gaming.mjs` (the picker's sections);
+the parts that are checkable offline - `scripts/tests/core/test-spinner-main.mjs` (what a switch
+pushes into each window), `scripts/tests/core/test-spinner-dom.mjs` (re-theme, revert and the flip
+frames in headless Chromium) and `scripts/tests/community/test-picker-gaming.mjs` (the picker's sections);
 `scripts/validate-patches.sh` runs all three.
 
 ### Risks

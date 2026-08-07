@@ -63,7 +63,7 @@ These files embed assumptions about upstream internals and **must be challenged 
 | `baseline/CLAUDE_FEATURE_FLAGS.md` | Function names, GrowthBook IDs, architecture details | Run Feature Flag Audit (Prompt 3 in update-prompt.md) |
 | `README.md` | Patch tables (one per `patches/` subdirectory: Community features, Core infrastructure, Linux compatibility - links must point at `patches/<group>/<name>.nim`), feature descriptions. Debug `rg` anchor patterns live in the patch sources themselves, not the README. **NOT** install command version numbers - those are updated automatically by CI. | Review after patches are fixed |
 | `baseline/CLAUDE_BUILT_IN_MCP.md` | Built-in MCP server names, registration patterns | Check `registerInternalMcpServer` calls in new JS |
-| `js/extra_settings_main.js` (`__cdbEx_DEPLOY_KEYS`) | The managed-settings key catalog the Extra → Deployment panel renders, pinned from the bundle's own zod schema. A key upstream removes keeps being offered; a key it adds is missing. Also the faithful port of the 3p-dir resolver and the mode decision | `rg -ao 'flatKey:"[A-Za-z0-9_]+"' tmp/app.asar.contents/.vite/build/index.pre.js \| sort -u` and diff against the catalog; `node scripts/test-deployment-main.mjs` asserts the shape |
+| `js/extra_settings_main.js` (`__cdbEx_DEPLOY_KEYS`) | The managed-settings key catalog the Extra → Deployment panel renders, pinned from the bundle's own zod schema. A key upstream removes keeps being offered; a key it adds is missing. Also the faithful port of the 3p-dir resolver and the mode decision | `rg -ao 'flatKey:"[A-Za-z0-9_]+"' tmp/app.asar.contents/.vite/build/index.pre.js \| sort -u` and diff against the catalog; `node scripts/tests/core/test-deployment-main.mjs` asserts the shape |
 | `baseline/PANEL_TABS_ANCHORS.md` | Panel-tabs DOM/fiber anchors: the row shape, `MAX_CHAIN_HOPS`, the literal `"chat"` tile id, the label->tileId map (upstream's `Browser` is tile `preview`), the Session-actions menu, and the runtime warnings that mean an anchor moved | Re-run the console recipes in that file against the new build; every `[cdb-tabs]` warning key listed there names the anchor that broke |
 | `baseline/ION.md` | ion-dist SPA bundle stats, patched patterns, config key schema | Run ion-dist checks (Prompt 4 in update-prompt.md) |
 | `baseline/PLATFORM_GATE_BASELINE.md` | darwin/win32 conditional counts, gate classifications (PATCHED/NATIVE/STUB/PORTABLE) | Run platform gate re-audit (Prompt 5 in update-prompt.md) |
@@ -335,6 +335,10 @@ patches/core/      #   Always-on infrastructure the rest builds on: the Extra se
                    #   engine, the GrowthBook override mechanism, multi-profile plumbing (7)
 js/                # Shared JS snippets embedded by Nim patches via staticRead ("../../js/..." from a patch)
 scripts/           # Build, validation, and launcher scripts (ls scripts/)
+scripts/tests/     # Feature test harnesses, grouped like patches/ (run: scripts/run-feature-tests.sh)
+scripts/tests/community/ #   Behavior tests for the opt-in community features (5)
+scripts/tests/core/      #   Behavior tests for the core infrastructure features (5)
+scripts/tests/lib/       #   Shared harness plumbing (theme-engine-harness.mjs), not tests themselves
 docs/              # Screenshots (chat, code, cowork, global UI)
 baseline/          # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md, PANEL_TABS_ANCHORS.md
 ```

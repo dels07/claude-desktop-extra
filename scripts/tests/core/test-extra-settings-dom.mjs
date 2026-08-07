@@ -246,8 +246,28 @@ async function featuresPanel(featuresItem) {
      panel.querySelector(".cdbx-h1").textContent);
   ok(!panel.querySelector(".cdbx-notice"),
      "no restart notice here - every switch in this panel applies live");
-  ok(!panel.querySelector(".cdbx-pathrow"),
-     "and no config file row - that belongs to the flag list");
+  // The config file row, the same footnote the Themes and Anthropic Features
+  // panels carry. It arrives from an async paths() read, so give it a tick.
+  await sleep(60);
+  const cfgRows = panel.querySelectorAll(".cdbx-pathrow");
+  ok(cfgRows.length === 1, "the panel links exactly one config file (" + cfgRows.length + ")");
+  if (cfgRows.length === 1) {
+    const shown = cfgRows[0].querySelector(".cdbx-pathlink").textContent;
+    ok(shown.endsWith("claude-desktop-extra.jsonc"),
+       "and it is the .jsonc, like the other two panels: " + shown);
+    ok(/win over this page/.test(cfgRows[0].textContent),
+       "worded as what that file does to these switches: " + cfgRows[0].textContent);
+    ok(cfgRows[0] === panel.lastElementChild,
+       "and it sits at the very bottom of the panel, as a footnote");
+    const seen = window.__revealCalls.length;
+    cfgRows[0].querySelector(".cdbx-pathbtn").click();
+    await sleep(40);
+    ok(window.__revealCalls[seen] === "config-jsonc:folder",
+       "its folder button works: " + window.__revealCalls.join(","));
+  }
+  ok(!Array.from(panel.querySelectorAll(".cdbx-pathlink"))
+      .some(function (a) { return a.textContent.endsWith("claude-desktop-extra.json"); }),
+     "the internal .json is not linked here either");
 
   // All four rows go through the same renderToggleRow contract, so the panel
   // tabs one below stands in for the mechanics and the others are checked for
@@ -480,9 +500,10 @@ async function flagsPanel(flagsItem) {
     ok(shown.endsWith("claude-desktop-extra.jsonc"), "and it is the .jsonc: " + shown);
     ok(/win over this page/.test(fileRows[0].textContent),
        "worded as what that file does, not as where the switches are saved: " + fileRows[0].textContent);
+    const seen = window.__revealCalls.length;
     fileRows[0].querySelector(".cdbx-pathbtn").click();
     await sleep(40);
-    ok(window.__revealCalls.indexOf("config-jsonc:folder") >= 0,
+    ok(window.__revealCalls[seen] === "config-jsonc:folder",
        "its folder button works: " + window.__revealCalls.join(","));
   }
   ok(!Array.from(panel.querySelectorAll(".cdbx-pathlink"))
@@ -1268,7 +1289,10 @@ window.cdbExtra = {
     window.__pickerCalls.push(enabled);
     return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/picker.json" });
   },
-  paths: stub({ ok: true, paths: {} }),
+  paths: stub({ ok: true, paths: {
+    json: "/home/u/.config/Claude/claude-desktop-extra.json",
+    jsonc: "/home/u/.config/Claude/claude-desktop-extra.jsonc",
+    userData: "/home/u/.config/Claude" } }),
   deployRead: function () { return Promise.resolve(window.__deployState); },
   deployMode: function (mode) {
     window.__deployCalls.push("mode:" + mode);

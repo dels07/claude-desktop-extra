@@ -8,7 +8,7 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 The **Features** page held two unrelated things: the handful of optional features this project adds, and Anthropic's own 134 rollout flags. They are now one page each.
 
-**Community Features** holds our switches - Diff view modes, Panel tabs, Calm the Cowork glow, and the new Theme picker hotkey - and gains the same filter box the flag list has, so a growing list stays quick to search. **Anthropic Features** holds the upstream flag list, the per-flag overrides and the "changes require a restart" notice with its Restart now button, unchanged. Nav order is Themes, Community Features, Anthropic Features, Deployment.
+**Community Features** holds our switches - Diff view modes, Panel tabs, Calm the Cowork glow, and the new Theme picker hotkey - and gains the same filter box the flag list has, so a growing list stays quick to search. **Anthropic Features** holds the upstream flag list, the per-flag overrides and the "changes require a restart" notice with its Restart now button, unchanged. Nav order is Themes, Community Features, Anthropic Features, Deployment. Like the other Extra pages, Community Features ends in a link to the config file behind it - the hand-edited `claude-desktop-extra.jsonc` wins over the switches per key.
 
 The new **Theme picker hotkey** switch (config key `themePicker`, on by default) turns the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> gallery off for anyone who wants that shortcut back for something else. The theme list in Settings → Extra → Themes is unaffected.
 

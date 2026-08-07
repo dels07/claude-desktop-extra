@@ -1313,8 +1313,13 @@
       if (row) rows.push(row);
     });
     search.placeholder = "Filter " + rows.length + " features by name or description";
+    // Nothing to filter is not a filter bar: an install whose preload predates
+    // every one of these switches gets the explanation below instead.
+    if (!rows.length) search.style.display = "none";
 
-    var empty = el("div", "cdbx-empty", "No feature matches that filter.");
+    var empty = el("div", "cdbx-empty", rows.length
+      ? "No feature matches that filter."
+      : "No community features are available in this build - reinstall to pick them up.");
     empty.style.display = "none";
     panel.appendChild(empty);
 
@@ -1336,6 +1341,23 @@
 
     search.addEventListener("input", function () { draw(search.value); });
     draw("");
+
+    // The config file this page answers to, presented exactly as the other two
+    // panels present theirs: ONLY the .jsonc is linked, because that is the file
+    // a human edits and the one whose value wins per key - a switch it sets
+    // renders locked and says so. The .json these switches are persisted to is
+    // internal bookkeeping and is deliberately not advertised, the same call the
+    // flag list makes. Appended last, after the rows, so it reads as a footnote;
+    // a failure is silent because a missing footnote is not worth an error box.
+    if (api && typeof api.paths === "function") {
+      api.paths().then(function (res) {
+        if (failed(res)) return;
+        var paths = (res && res.paths) || {};
+        if (!paths.jsonc) return;
+        panel.appendChild(pathRow("Switches you set by hand here win over this page",
+          paths.jsonc, cfgLocation(paths.jsonc)));
+      }, function () {});
+    }
   }
 
   // --- anthropic features panel --------------------------------------------

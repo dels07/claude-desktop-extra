@@ -2,25 +2,7 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
-## 2026-08-06
-
-### Panel tabs: the in-bar `+` menu is gone
-
-The `+` open-panel control in the tab strip has been removed, along with everything that
-supported it. It was parked behind a flag since 2026-08-05 ("quite quirky"); the flag and
-the code are now both deleted rather than carried. Open panels the way you always have -
-the app's own toolbar buttons and its **Session actions** menu - and each one still
-arrives as a new tab. The tab strip, <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd>, the
-per-tab close, the expand control and the held chat/panel boundary are unchanged.
-
-Worth knowing because it removes a behaviour rather than a button: the `+` needed to know
-which panels a session offered, and the only way to find that out was to open the app's
-own **Session actions** menu in the background and read it. That probe is gone. Nothing in
-this feature now presses a control the user did not press, and it no longer sets any
-attribute of its own on the page's root element. Panel-tab code that touches the app is
-down to reading the layout and clicking the active panel's own close/expand buttons.
-
-## 2026-08-05
+## 2026-08-07
 
 ### The Code tab's side panels can open as tabs instead of a split
 
@@ -38,7 +20,17 @@ Opening and closing panels does not disturb the layout. A panel the app has only
 
 Off by default, and off is a complete retreat: the tab bar and its styling are removed and upstream's real split layout is simply there again, because it was never replaced. Nothing you had open is lost. Only the active tab and the chat/side proportion are remembered per session - which panels are open is upstream's own record, so opening, closing or reordering panels in its UI is reflected in the tabs.
 
-Because the Code tab is remote claude.ai code, the bar degrades rather than fights: if an update moves the internals it drives, it renders no bar and warns once, leaving the layout exactly as the app left it - and since it never rewrites that layout, the degraded state is just the stock split UI.
+Because the Code tab is remote claude.ai code, the bar degrades rather than fights: if an update moves the internals it drives, it renders no bar and warns once, leaving the layout exactly as the app left it - and since it never rewrites that layout, the degraded state is just the stock split UI. Everything it reaches into is read-only: the only upstream controls it ever presses are the active panel's own close and expand buttons, and only when you press them. The anchors it depends on are inventoried with re-derivation recipes in `baseline/PANEL_TABS_ANCHORS.md`, which joins the per-release audit checklist.
+
+Designed, built and hardened by [@dels07](https://github.com/dels07) in [#216](https://github.com/patrickjaja/claude-desktop-extra/pull/216) - thanks!
+
+### Diff views: the scope dropdown no longer survives a panel swap
+
+Upstream reuses a panel's chrome row when one panel replaces another in the same slot, and the diff-views scope dropdown installed on that row could survive the swap and appear on a view it does not apply to. Installed dropdowns are now revalidated against the row's current view and removed when it no longer qualifies. A pre-existing bug, found and fixed in [#216](https://github.com/patrickjaja/claude-desktop-extra/pull/216) because panel tabs made it easy to hit.
+
+### Release pipeline: releases can skip the AUR during an extended outage
+
+The AUR preflight added on 2026-08-03 did its job: when the AUR went into maintenance again, the v1.24012.11 auto-release (run 30868900341) stopped before publishing anything, keeping every channel consistent. The right call for a blip - but this maintenance window has lasted days, freezing all channels behind one that is down. The release workflow now takes a `skip_aur` dispatch input: the AUR preflight and push are skipped, every other channel (GitHub Release, pacman repo assets, Pages apt/dnf repos, README/Nix versions) publishes normally, and the AUR catches up automatically on the next non-skipped release, since the push diffs the PKGBUILD against whatever the AUR currently holds. Unattended auto-releases keep the default `false`, so the fail-fast preflight still guards them.
 
 ## 2026-08-03
 

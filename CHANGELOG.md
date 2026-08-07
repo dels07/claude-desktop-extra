@@ -28,6 +28,10 @@ When `coworkGlow` is set by hand, the switch locks itself and explains where the
 
 Patches still apply in basename order, so the split changes classification only, not behavior. `scripts/apply_patches.py` now pins the total in `EXPECTED_PATCH_COUNT` and refuses to run if discovery finds a different number - a patch cannot be added or lost without someone saying so. The README documents the recipe for adding a community feature.
 
+### CI: the smoke test no longer fails on its own cleanup
+
+The smoke test could report a pass and then fail the job anyway: Electron's shutdown crashes in headless containers, and crash reporting kept writing into the temporary profile while the test was deleting it. Cleanup now waits for the process tree to end and retries the delete, and a cleanup hiccup can no longer override the test verdict.
+
 ### The Code tab's side panels can open as tabs instead of a split
 
 Diff, terminal, browser, files, artifacts and background tasks have always shared the panel area as a fixed split, each one shrinking to make room for its neighbours. A new **Panel tabs** switch (Settings → Extra → Community Features → Layout) turns that into a tab strip instead: each panel gets the full width of the panel area. Open panels the way you always have - the app's own toolbar buttons and its **Session actions** menu - and each one arrives as a new tab. <kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>9</kbd> jump straight to a tab, and closing one replays it through the panel's own close control, so panel teardown itself is unchanged. The chat column is unaffected.

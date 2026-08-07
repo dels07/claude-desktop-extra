@@ -95,7 +95,23 @@ fi
 # process group so the kill below reaps every child - killing only xvfb-run
 # leaves orphaned Electron processes holding stdout/stderr open.
 SMOKE_USERDATA=$(mktemp -d)
-trap "rm -f $STDERR_LOG; rm -rf $SMOKE_USERDATA" EXIT
+# Cleanup must tolerate the app's messy death: Electron's shutdown path FATALs
+# in headless containers and crashpad keeps writing into the user-data dir for
+# a moment after the direct child is reaped, so a single rm -rf can lose the
+# race ("Directory not empty") - and under set -e that failure would become the
+# script's exit code AFTER the test already passed. Drain the process group,
+# then retry the rm, and never let cleanup decide the verdict.
+_cleanup() {
+    rm -f "$STDERR_LOG" || true
+    if [ -n "${APP_PID:-}" ]; then
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 -- "-$APP_PID" 2>/dev/null || break
+            sleep 1
+        done
+    fi
+    rm -rf "$SMOKE_USERDATA" 2>/dev/null || { sleep 2; rm -rf "$SMOKE_USERDATA" || true; }
+}
+trap _cleanup EXIT
 if [ "${SMOKE_WAYLAND:-0}" = "1" ]; then
     setsid "$ELECTRON_BIN" --ozone-platform=wayland --no-sandbox \
         --user-data-dir="$SMOKE_USERDATA" 2>"$STDERR_LOG" &

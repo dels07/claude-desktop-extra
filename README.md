@@ -13,17 +13,18 @@
 
 **Anthropic's official Claude Desktop Linux build, repackaged for the distros Anthropic doesn't ship - plus Linux-only extras.**
 
-Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project - **claude-desktop-extra** - takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on five Linux-only value-adds the official build lacks:
+Anthropic publishes an official Claude Desktop [Linux `.deb`](https://code.claude.com/docs/en/desktop-linux) (Ubuntu 22.04+ / Debian 12+, amd64 + arm64). This project - **claude-desktop-extra** - takes that official build, repackages it for **Arch, Fedora/RHEL, NixOS, and AppImage** (and offers its own Debian/Ubuntu `.deb`), and layers on Linux-only value-adds the official build lacks:
 
 - [**Computer Use**](#computer-use) - desktop automation (screenshot, click, type, scroll, teach mode).
 - [**Custom Themes**](#custom-themes) - 97 bundled dual light/dark palettes (7 built-in, 6 gaming, 84 community), each with its own loading spinner, switchable live from a Ctrl+Shift+T picker, or roll your own.
 - [**Multiple Profiles**](#multiple-profiles) - run several instances side by side, each logged in to a different account with fully isolated state.
 - [**Quick Entry**](#quick-entry) - global hotkey popup (Ctrl+Alt+Space), multi-monitor and Wayland-aware.
 - [**Hardware Buddy**](docs/feature-flags.md) - enables the Nibblet BLE pet device on Linux: forces the feature flag so the BLE transport arms, and turns on Chromium Web Bluetooth (via BlueZ) so the in-app scan can find the device - both are off by default upstream on Linux.
+- [**[...]**](PATCHES.md#community-features) - and more: panel tabs, diff view modes, a calmer Cowork glow, upstream feature-flag switches - each with its own toggle under Settings → **Extra**, and the list keeps growing ([add your own](PATCHES.md#adding-your-own-feature)).
 
 Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise inference - is the **official upstream build**, preserved through the repackage. Where its shared cross-platform bundle still gates a feature to macOS/Windows or misbehaves on a Linux desktop, we ship a **Linux fix** (see [PATCHES.md](PATCHES.md) - each entry states exactly why it exists).
 
-> **If you run Ubuntu 22.04+ / Debian 12+,** Anthropic's [official `.deb`](https://code.claude.com/docs/en/desktop-linux) installs the base app directly. Use this project if you're on Arch/Fedora/RHEL/Nix/AppImage, or if you want the five value-adds and Linux fixes above.
+> **If you run Ubuntu 22.04+ / Debian 12+,** Anthropic's [official `.deb`](https://code.claude.com/docs/en/desktop-linux) installs the base app directly. Use this project if you're on Arch/Fedora/RHEL/Nix/AppImage, or if you want the value-adds and Linux fixes above.
 
 ## Installation
 
@@ -247,7 +248,21 @@ One exception: an existing `[claude-desktop-bin]` section in `/etc/pacman.conf` 
 
 </details>
 
-### Verifying the repository signing key
+<a name="cowork-setup-needs-devkvm"></a>
+<details>
+<summary><b>Cowork setup (needs /dev/kvm)</b> - optional, applies to every install path</summary>
+
+Cowork (and Dispatch) run on the **official native Cowork VM backend** bundled inside the package - the same one Anthropic ships in the official Linux build. Sessions run in a lightweight VM with `$HOME` shared in, so the host needs **QEMU + UEFI firmware + virtiofsd** and access to **`/dev/kvm`**.
+
+The `.deb` and `.rpm` packages pull those in automatically and the Nix flake bakes them into the closure; on **Arch**, **AppImage** and source builds you install them from your distro's repos. Either way, join the `kvm` group once (`sudo usermod -aG kvm "$USER"`, then log out and back in).
+
+Per-distro install commands, the troubleshooting table for every popup Cowork can show, and what `claude-desktop --diagnose` reports: **[docs/cowork.md](docs/cowork.md)**. For what Cowork itself is and how to use it, see Anthropic's [Get started with Claude Cowork](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork).
+
+</details>
+
+<a name="verifying-the-repository-signing-key"></a>
+<details>
+<summary><b>Verifying the repository signing key</b> (applies to the APT, DNF and pacman repos)</summary>
 
 The APT, DNF and pacman repositories are GPG-signed with the same key. The install scripts import it from GitHub Pages over HTTPS. To verify the key out-of-band, compare its fingerprint against the value published here (this README lives in the git repo, a separate channel from the Pages-hosted key):
 
@@ -262,13 +277,7 @@ curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/gpg-key.asc | gpg 
 # The printed fingerprint must match the value above.
 ```
 
-## Computer Use
-
-**Our exclusive feature - not part of the official Linux build.** Claude Desktop's built-in Computer Use MCP server exposes 27 tools for desktop automation (screenshot, click, type, scroll, drag, clipboard, and more), plus **learn tools** that generate interactive overlay tutorials for any app. Upstream gates it to macOS/Windows and ships no Linux backend; the patch ([`fix_computer_use_linux.nim`](patches/linux/fix_computer_use_linux.nim)) removes the platform gates and injects a Linux executor that auto-detects your session and routes to a bundled first-party bridge: [`x11-bridge`](https://github.com/patrickjaja/x11-bridge) on X11 / XWayland, [`wlroots-bridge`](https://github.com/patrickjaja/wlroots-bridge) on Sway / Hyprland / Niri (native virtual-pointer/keyboard + screencopy + foreign-toplevel protocols), [`gnome-portal-bridge`](https://github.com/patrickjaja/gnome-bridge) on GNOME Wayland (XDG RemoteDesktop + ScreenCast portal, one consent dialog per session, persisted on GNOME 46+; needs PipeWire >= 1.0.5, i.e. Ubuntu 24.04+ / Fedora 40+ / Debian 13+), and [`kwin-portal-bridge`](https://github.com/patrickjaja/kwin-portal-bridge) on KDE Plasma 6.6+. No third-party input/screenshot tools needed; only exotic Wayland compositors fall back to `ydotool`.
-
-**Nothing to install** - the bridges ship inside the package. See **[docs/computer-use.md](docs/computer-use.md)** for how it works, the notes (primary-monitor, app discovery, teach overlay), and links to the [tool reference](baseline/CLAUDE_BUILT_IN_MCP.md#17-computer-use); [Computer Use dependencies](docs/computer-use-dependencies.md) has the per-session matrix and the exotic-compositor `ydotool` fallback.
-
-**KDE Plasma needs 6.6+** for the native KWin route (earlier Plasma lacks the KWin capture-hiding API) - below that, Computer Use falls back to `ydotool`/`spectacle`; updating Plasma restores the full experience. `claude-desktop --diagnose` prints your KWin version and which route is active.
+</details>
 
 ## The "Extra" Settings
 
@@ -279,13 +288,21 @@ This package adds its own section to Claude's Settings dialog: **Extra** - the h
 Four panels today:
 
 - **Extra → Themes** - all **97 bundled palettes** with live color dots; one click applies instantly in every open window. Make Claude Desktop blend into your Linux desktop: palettes matching stock DE looks (ADW/Adwaita, Breeze) sit next to the classics (Catppuccin, Nord, Gruvbox, Rose Pine, Everforest) and a [Gaming collection](docs/themes.md).
-- **Extra → Community Features** - the optional extras this project adds ([6 patches](PATCHES.md#community-features) behind 4 switches: panel tabs, diff view modes, the theme-picker hotkey, a calmer Cowork glow), with a filter box over them.
-- **Extra → Anthropic Features** - the catalogued upstream [feature flags](#feature-flag-overrides-advanced) as switches, no config-file editing needed.
+- **Extra → Community Features** - the **4 optional features** this project currently adds, each as a switch ([6 patches](PATCHES.md#community-features): panel tabs, diff view modes, the theme-picker hotkey, a calmer Cowork glow), with a filter box over them.
+- **Extra → Anthropic Features** - all **134 upstream [feature flags](#feature-flag-overrides-advanced)** this build reads, each as a switch - no config-file editing needed.
 - **Extra → Deployment** - a **1P / 3P switch** plus the whole [third-party inference](#third-party--enterprise-inference) configuration as toggles and fields. Turning 3P on used to be a one-way door without a root shell; here it is a button, and every value is written to your own profile directory.
 
 Every panel ends in the config file behind it, as a link: click the path to open the file, or the **folder** button to show it in your file manager.
 
 Expect this section to grow - Extra is where the project is heading.
+
+## Computer Use
+
+**Our exclusive feature - not part of the official Linux build.** Claude Desktop's built-in Computer Use MCP server exposes 27 tools for desktop automation (screenshot, click, type, scroll, drag, clipboard, and more), plus **learn tools** that generate interactive overlay tutorials for any app. Upstream gates it to macOS/Windows and ships no Linux backend; the patch ([`fix_computer_use_linux.nim`](patches/linux/fix_computer_use_linux.nim)) removes the platform gates and injects a Linux executor that auto-detects your session and routes to a bundled first-party bridge: [`x11-bridge`](https://github.com/patrickjaja/x11-bridge) on X11 / XWayland, [`wlroots-bridge`](https://github.com/patrickjaja/wlroots-bridge) on Sway / Hyprland / Niri (native virtual-pointer/keyboard + screencopy + foreign-toplevel protocols), [`gnome-portal-bridge`](https://github.com/patrickjaja/gnome-bridge) on GNOME Wayland (XDG RemoteDesktop + ScreenCast portal, one consent dialog per session, persisted on GNOME 46+; needs PipeWire >= 1.0.5, i.e. Ubuntu 24.04+ / Fedora 40+ / Debian 13+), and [`kwin-portal-bridge`](https://github.com/patrickjaja/kwin-portal-bridge) on KDE Plasma 6.6+. No third-party input/screenshot tools needed; only exotic Wayland compositors fall back to `ydotool`.
+
+**Nothing to install** - the bridges ship inside the package. See **[docs/computer-use.md](docs/computer-use.md)** for how it works, the notes (primary-monitor, app discovery, teach overlay), and links to the [tool reference](baseline/CLAUDE_BUILT_IN_MCP.md#17-computer-use); [Computer Use dependencies](docs/computer-use-dependencies.md) has the per-session matrix and the exotic-compositor `ydotool` fallback.
+
+**KDE Plasma needs 6.6+** for the native KWin route (earlier Plasma lacks the KWin capture-hiding API) - below that, Computer Use falls back to `ydotool`/`spectacle`; updating Plasma restores the full experience. `claude-desktop --diagnose` prints your KWin version and which route is active.
 
 ## Custom Themes
 
@@ -314,14 +331,6 @@ The default profile stays byte-identical to a single-instance install, and you c
 A global-hotkey popup (default <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd>) that opens a compact Claude prompt on the monitor where your cursor is. It works out of the box on **KDE Plasma**, **Hyprland** and **Sway** via `xdg-desktop-portal` GlobalShortcuts; on **GNOME** the portal silently fails to register, so run `claude-desktop --install-gnome-hotkey` once after install.
 
 Bind it to any key yourself with `claude-desktop --toggle`, which opens the popup in milliseconds and starts the app if it isn't running. Per-desktop setup and hotkey troubleshooting: **[docs/quick-entry.md](docs/quick-entry.md)**.
-
-## Cowork setup (needs /dev/kvm)
-
-Cowork (and Dispatch) run on the **official native Cowork VM backend** bundled inside the package - the same one Anthropic ships in the official Linux build. Sessions run in a lightweight VM with `$HOME` shared in, so the host needs **QEMU + UEFI firmware + virtiofsd** and access to **`/dev/kvm`**.
-
-The `.deb` and `.rpm` packages pull those in automatically and the Nix flake bakes them into the closure; on **Arch**, **AppImage** and source builds you install them from your distro's repos. Either way, join the `kvm` group once (`sudo usermod -aG kvm "$USER"`, then log out and back in).
-
-Per-distro install commands, the troubleshooting table for every popup Cowork can show, and what `claude-desktop --diagnose` reports: **[docs/cowork.md](docs/cowork.md)**.
 
 ## Third-Party / Enterprise Inference
 

@@ -1,6 +1,6 @@
 # Cowork setup (needs /dev/kvm)
 
-What Cowork and Dispatch need from the host, per distro, and what to do when a popup says something is missing. For the short version, see [Cowork setup in the README](../README.md#cowork-setup-needs-devkvm).
+What Cowork and Dispatch need from the host, per distro, and what to do when a popup says something is missing. For the short version, see [Cowork setup in the README](../README.md#cowork-setup-needs-devkvm); for what Cowork itself is and how to use it, see Anthropic's official [Get started with Claude Cowork](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork).
 
 Cowork (and Dispatch) run on the **official native Cowork VM backend** bundled inside the package (cowork-linux-helper + virtiofsd + smol-bin + QEMU/OVMF) - the same backend Anthropic ships in the official Linux build. There's no separate daemon to install; sessions run in a lightweight VM with `$HOME` shared in, which requires **`/dev/kvm`** on the host.
 

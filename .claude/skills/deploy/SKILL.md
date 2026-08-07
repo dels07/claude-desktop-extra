@@ -1,14 +1,14 @@
 ---
 name: deploy
-description: Trigger the claude-desktop-extra Build & Release GitHub Actions pipeline (build-and-release.yml). With no argument the skill inspects the changes since the last release and decides force_rebuild itself; "/deploy force" / "/deploy no-force" override.
+description: Trigger the claude-desktop-extra Build & Release GitHub Actions pipeline (build-and-release.yml). With no argument the skill inspects the changes since the last release and decides force_rebuild itself; "/deploy force" / "/deploy no-force" override. "skip-aur" (or any mention of the AUR being down) adds skip_aur=true.
 disable-model-invocation: true
-argument-hint: "[force|no-force]"
+argument-hint: "[force|no-force] [skip-aur]"
 allowed-tools: Bash(gh workflow run *), Bash(gh run list *), Bash(gh run view *), Bash(gh workflow view *), Bash(gh release list *), Bash(git fetch *), Bash(git diff *), Bash(git log *)
 ---
 
 # Deploy - trigger Build & Release
 
-Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = decide automatically).
+Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = decide automatically. `skip-aur` - or the user saying the AUR is down - sets `skip_aur=true`).
 
 ## Context
 - Repo: `patrickjaja/claude-desktop-extra` · Workflow: `build-and-release.yml` · default branch: `master`.
@@ -34,6 +34,7 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
 4. Fire it (no interactive confirmation - the user already typed /deploy):
    ```bash
    gh -R patrickjaja/claude-desktop-extra workflow run build-and-release.yml -f force_rebuild=<FORCE>
+   # AUR down for maintenance? Append: -f skip_aur=true
    ```
 5. Wait ~3s, then resolve the run and report its URL:
    ```bash
@@ -43,6 +44,7 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
    Report the run URL and status. Offer: "Watch with `gh -R patrickjaja/claude-desktop-extra run watch <id>`".
 
 ## Notes
+- **`skip_aur=true`** skips the AUR preflight + AUR push only; every other channel (GitHub release, pacman repo, APT/DNF metadata, Nix bump) publishes normally, and the AUR catches up automatically on the next non-skipped release. Use it during AUR maintenance windows. Without it, the release job's AUR preflight probes `ssh://aur.archlinux.org` and fails the run fast (before publishing anything) when the AUR is down - if that happens, re-dispatch with skip-aur; a half-deployed run can be healed with `gh run rerun <id> --failed`.
 - Do NOT bump versions or edit files here - this only triggers the pipeline. Version/patch work belongs in `/update`.
 - If the diff shows BOTH a new `.upstream-version` and other changes, the non-force new-upstream run covers everything (the release builds from the committed tree).
 - If `gh workflow run` errors with "Workflow does not have 'workflow_dispatch'" it's a permissions/branch issue - confirm the workflow file on `master` still declares `workflow_dispatch`.

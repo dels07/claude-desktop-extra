@@ -11,6 +11,6 @@ Example prompt: *"Can you use computer use MCP to explain me the PhpStorm applic
 - **App discovery** for the teach overlay scans `.desktop` files from `/usr/share/applications`, `~/.local/share/applications`, and Flatpak dirs, registering each with multiple name variants for flexible matching.
 - **Teach overlay** stays interactive but blocks clicks to apps behind it during a tour (Electron's `setIgnoreMouseEvents` is [broken on X11](https://github.com/electron/electron/issues/16777)).
 
-See [CLAUDE_BUILT_IN_MCP.md](../baseline/CLAUDE_BUILT_IN_MCP.md#14-computer-use) for the full tool reference, and [Computer Use dependencies](computer-use-dependencies.md) for the package matrix, the KDE/GNOME portal behavior notes, `COWORK_SCREENSHOT_CMD`, and `ydotool` v1.0+ setup.
+See [CLAUDE_BUILT_IN_MCP.md](../baseline/CLAUDE_BUILT_IN_MCP.md#17-computer-use) for the full tool reference, and [Computer Use dependencies](computer-use-dependencies.md) for the package matrix, the KDE/GNOME portal behavior notes, `COWORK_SCREENSHOT_CMD`, and `ydotool` v1.0+ setup.
 
 **Debugging:** Computer Use patches emit `[claude-cu] diagnostics:` lines showing the detected session, available/missing tools, and screenshot cascade. Find them in `~/.config/Claude/logs/claude-patches.log` (also printed to stderr on terminal launches) and share that file when reporting Computer Use issues. See also [Debugging](../README.md#debugging).

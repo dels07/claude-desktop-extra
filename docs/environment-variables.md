@@ -4,7 +4,7 @@ These environment variables tune `claude-desktop` at launch. All are optional; w
 
 | Variable | Values | Description |
 |----------|--------|-------------|
-| `CLAUDE_PROFILE` | name | Select a [profile](../README.md#multiple-profiles) by name. Inherited by Electron and Claude Code so per-profile sockets and config dirs are picked up everywhere |
+| `CLAUDE_PROFILE` | name | Select a [profile](profiles.md) by name. Inherited by Electron and Claude Code so per-profile sockets and config dirs are picked up everywhere |
 | `CLAUDE_PROFILE_QUIET` | `1` | Suppress the "no per-profile WM identity" hint when `CLAUDE_PROFILE` is set without a matching `--create-profile` |
 | `CLAUDE_CONFIG_DIR` | path | Override Claude Code's config dir. Auto-set by the launcher when `CLAUDE_PROFILE` is active |
 | `CLAUDE_DISABLE_GPU` | `1`, `full` | Fix white screen on some GPU/driver combos ([#13](https://github.com/patrickjaja/claude-desktop-extra/issues/13)). `1` disables compositing only, `full` disables GPU entirely |
@@ -25,7 +25,7 @@ Set permanently in `~/.bashrc` / `~/.zshrc`, or pass per-launch: `CLAUDE_DISABLE
 
 A few variables belong to specific features and are documented alongside them:
 
-- `COWORK_SCREENSHOT_CMD` - override Computer Use screenshot auto-detection. See [Computer Use dependencies](computer-use-dependencies.md#custom-screenshot-command).
+- `COWORK_SCREENSHOT_CMD` - override Computer Use screenshot auto-detection. See [Computer Use dependencies](computer-use-dependencies.md).
 - `CLAUDE_VIRTIOFSD_PATH` - path to a system `virtiofsd` binary for the Cowork VM capability probe. Checked before all fixed candidate paths. Needed only when virtiofsd lives outside the probed locations (`/usr/libexec`, `/usr/lib`, `/usr/lib/qemu`, `/run/current-system/sw/bin`, `/usr/bin`) - e.g. AppImage on NixOS. The Nix flake package sets it automatically; the bundled virtiofsd is only ever used on Ubuntu 22.x ([#177](https://github.com/patrickjaja/claude-desktop-extra/issues/177)).
 - `CLAUDE_OVMF_CODE_PATH` - path to an OVMF/AAVMF UEFI *CODE* firmware image for the Cowork VM capability probe, checked before the fixed `/usr/share/...` candidates. The matching `*_VARS*` file must sit next to it with the same name shape (the app derives it by replacing `OVMF_CODE` -> `OVMF_VARS` / `AAVMF_CODE` -> `AAVMF_VARS` in the filename). The Nix flake package sets it automatically ([#177](https://github.com/patrickjaja/claude-desktop-extra/issues/177)).
 

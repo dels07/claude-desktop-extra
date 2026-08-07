@@ -59,7 +59,7 @@ you'll find an **Extra** group in the nav with two entries:
   does, into `claude-desktop-extra.jsonc` with your comments intact.
 - **Features** - the 134 catalogued GrowthBook feature flags as switches, so you can
   browse and flip them without hand-editing a config file. See
-  [Feature Flag Overrides](../README.md#feature-flag-overrides-advanced) for what the
+  [Feature Flag Overrides](../docs/feature-flags.md) for what the
   flags are.
 
 The Features panel starts from what your account actually gets: flags upstream already

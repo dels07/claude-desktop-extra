@@ -95,7 +95,7 @@ Copy-paste this into Claude Code when a new version is available:
 >    - `baseline/CLAUDE_FEATURE_FLAGS.md` — if flags added/removed/renamed
 >    - `baseline/CLAUDE_BUILT_IN_MCP.md` — if MCP servers changed (check `registerInternalMcpServer` calls)
 >    - `CHANGELOG.md` — add new version entry
->    - `README.md` patch table — if patches added/removed/changed
+>    - `PATCHES.md` patch tables - if patches added/removed/changed (the README keeps only the per-directory counts)
 >    - `baseline/ION.md` — if ion-dist bundle stats, patterns, or config keys changed
 >    - **`.upstream-version` — bump to the new version (required).** This is what closes the auto-created "new version detected" issue and greens the README badge. `version-check.yml` compares the highest `Version:` in the official apt Packages index against this file; until they match, the issue is recreated every 2h. Bump it even for a trivial build bump with no public release.
 >
@@ -380,4 +380,4 @@ Minified names change every release. The pattern is always the same — just the
 
 ## Patch Reference
 
-See the **[Patches table in README.md](README.md#patches)** for the full list of all patches including break risk and debug `rg` patterns for finding new code when a patch fails.
+See **[PATCHES.md](PATCHES.md)** for the full list of all patches including break risk and debug `rg` patterns for finding new code when a patch fails.

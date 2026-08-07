@@ -61,7 +61,8 @@ These files embed assumptions about upstream internals and **must be challenged 
 |------|---------------|-----------------|
 | `patches/{linux,community,core}/*.nim` | Regex patterns matching minified JS | Build fails → fix patterns → `make` → `node --check` |
 | `baseline/CLAUDE_FEATURE_FLAGS.md` | Function names, GrowthBook IDs, architecture details | Run Feature Flag Audit (Prompt 3 in update-prompt.md) |
-| `README.md` | Patch tables (one per `patches/` subdirectory: Community features, Core infrastructure, Linux compatibility - links must point at `patches/<group>/<name>.nim`), feature descriptions. Debug `rg` anchor patterns live in the patch sources themselves, not the README. **NOT** install command version numbers - those are updated automatically by CI. | Review after patches are fixed |
+| `PATCHES.md` | The patch catalog: one table per `patches/` subdirectory (Community features, Core infrastructure, Linux compatibility), each row linking `patches/<group>/<name>.nim`. Debug `rg` anchor patterns live in the patch sources themselves, not here. | Review after patches are fixed |
+| `README.md` | Feature descriptions, and the three-bullet patch summary with its per-directory counts (the tables themselves live in `PATCHES.md`). **NOT** install command version numbers - those are updated automatically by CI. | Review after patches are fixed |
 | `baseline/CLAUDE_BUILT_IN_MCP.md` | Built-in MCP server names, registration patterns | Check `registerInternalMcpServer` calls in new JS |
 | `js/extra_settings_main.js` (`__cdbEx_DEPLOY_KEYS`) | The managed-settings key catalog the Extra → Deployment panel renders, pinned from the bundle's own zod schema. A key upstream removes keeps being offered; a key it adds is missing. Also the faithful port of the 3p-dir resolver and the mode decision | `rg -ao 'flatKey:"[A-Za-z0-9_]+"' tmp/app.asar.contents/.vite/build/index.pre.js \| sort -u` and diff against the catalog; `node scripts/tests/core/test-deployment-main.mjs` asserts the shape |
 | `baseline/PANEL_TABS_ANCHORS.md` | Panel-tabs DOM/fiber anchors: the row shape, `MAX_CHAIN_HOPS`, the literal `"chat"` tile id, the label->tileId map (upstream's `Browser` is tile `preview`), the Session-actions menu, and the runtime warnings that mean an anchor moved | Re-run the console recipes in that file against the new build; every `[cdb-tabs]` warning key listed there names the anchor that broke |
@@ -339,13 +340,15 @@ scripts/tests/     # Feature test harnesses, grouped like patches/ (run: scripts
 scripts/tests/community/ #   Behavior tests for the opt-in community features (5)
 scripts/tests/core/      #   Behavior tests for the core infrastructure features (5)
 scripts/tests/lib/       #   Shared harness plumbing (theme-engine-harness.mjs), not tests themselves
-docs/              # Screenshots (chat, code, cowork, global UI)
+docs/              # Per-feature deep-dives (themes, profiles, quick-entry, cowork, feature-flags,
+                   #   computer-use, third-party-inference, environment-variables) + screenshots.
+                   #   The README carries only a teaser per feature and links here.
 baseline/          # Version-sensitive reference docs re-validated against the bundle each release: CLAUDE_FEATURE_FLAGS.md, CLAUDE_BUILT_IN_MCP.md, ION.md, PLATFORM_GATE_BASELINE.md, PANEL_TABS_ANCHORS.md
 ```
 
 Each patch has a `# @patch-target:` and `# @patch-type: nim` header. The Makefile compiles them to native binaries. The orchestrator (`scripts/apply_patches.py`) discovers them recursively across the three subdirectories and applies them in **basename order** (the directory only classifies a patch, it does not order it). Use `ls patches/*/*.nim` as the single source of truth for what exists.
 
-`apply_patches.py` pins the total in `EXPECTED_PATCH_COUNT` and fails loud when discovery finds a different number - bump the constant in the same commit that adds or removes a patch. The README's "Adding your own feature" section documents the full recipe for a new opt-in feature (patch + config key + toggle row).
+`apply_patches.py` pins the total in `EXPECTED_PATCH_COUNT` and fails loud when discovery finds a different number - bump the constant in the same commit that adds or removes a patch. `PATCHES.md` documents the full recipe for a new opt-in feature in its "Adding your own feature" section (patch + config key + toggle row).
 
 ## Profile System (multi-instance)
 

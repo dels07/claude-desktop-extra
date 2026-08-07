@@ -80,7 +80,7 @@ Cowork now runs on the `.deb`'s bundled native VM backend (cowork-linux-helper +
 Update only what changed:
 - `CHANGELOG.md` - add the new entry (one `##` section per day, newest at top; informative not a debug log).
 - `baseline/CLAUDE_FEATURE_FLAGS.md`, `CLAUDE_BUILT_IN_MCP.md`, `ION.md`, `PLATFORM_GATE_BASELINE.md` - if their tracked internals moved.
-- `README.md` patch table - if patches added/removed/changed. **Do NOT touch README install-command version numbers** (CI updates those via `sed`; manual edits cause merge conflicts).
+- `PATCHES.md` patch tables - if patches added/removed/changed; the README's three-bullet summary carries the per-directory counts. **Do NOT touch README install-command version numbers** (CI updates those via `sed`; manual edits cause merge conflicts).
 
 ## Step 9 - bump .upstream-version (required) + commit
 ```bash

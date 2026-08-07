@@ -18,6 +18,12 @@ Nothing moves on disk: both `claude-desktop-extra.jsonc` (yours, wins) and `clau
 
 When `coworkGlow` is set by hand, the switch locks itself and explains where the value came from - but it named `claude-desktop-bin.jsonc`, the filename from before the project was renamed. It now names `claude-desktop-extra.jsonc`, which is the file actually being read.
 
+### The README is an overview again; the details moved into their own files
+
+The README had grown to the point where finding out *what* the project offers meant scrolling past everything about *how* it works. It now carries a short teaser per feature and links onward.
+
+The patch catalog moved to [`PATCHES.md`](PATCHES.md), one table per directory, with every description tightened to one sentence saying what the patch does and why you would want it - the mechanism it depends on stays documented in the patch source, which each row now links to. Custom Themes, Multiple Profiles, Quick Entry, Cowork setup and Feature Flag Overrides each moved into `docs/`, following the pattern Computer Use already used. Every README heading stayed exactly where it was, so existing links into the README still land on the right section.
+
 ### Patches are grouped by what they are for
 
 `patches/` was a flat directory of 45 `.nim` files where nothing distinguished a Linux bug fix from an optional feature. It is now three:

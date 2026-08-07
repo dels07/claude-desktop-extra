@@ -16,7 +16,7 @@ An **automatic release run** for `{{UPSTREAM}}` has been dispatched ([Build & Re
 
 ## If the automatic release failed
 
-The two likely causes, per CLAUDE.md's Patch Strictness Rules:
+The two likely causes, per AGENTS.md's Patch Strictness Rules:
 
 1. **Upstream's re-minify moved a patch anchor** → fix the regex (`[\w$]+` wildcards + capture/replace).
 2. **Upstream natively implemented something we patch** → remove the patch, or convert it to a regression guard. This is the expected direction over time: Anthropic maintains 1p Linux support now, so our patch set should shrink, not grow.
@@ -44,7 +44,7 @@ Closing this issue: a successful release run closes it automatically (the releas
 {{CC_PROMPT}}
 ```
 
-Full reference: [update-prompt.md](https://github.com/{{REPO}}/blob/master/update-prompt.md) · [CLAUDE.md](https://github.com/{{REPO}}/blob/master/CLAUDE.md) (architecture + distro/session support tables).
+Full reference: [update-prompt.md](https://github.com/{{REPO}}/blob/master/update-prompt.md) · [AGENTS.md](https://github.com/{{REPO}}/blob/master/AGENTS.md) (architecture + distro/session support tables).
 
 </details>
 

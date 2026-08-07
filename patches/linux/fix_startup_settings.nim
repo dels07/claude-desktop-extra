@@ -32,7 +32,7 @@
 # and the whole bundle has ZERO /run/user and ZERO gnome-session references. A
 # GNOME session-restore relaunch (no --startup) therefore still shows the window.
 #
-# So per CLAUDE.md Rule 6:
+# So per AGENTS.md Rule 6:
 #   - P1 (read) + P2 (write): convert to REGRESSION GUARDS that positively assert
 #     the native XDG autostart read/write end-state is present (FAIL loud if a
 #     future bump removes it — that would silently break the Settings toggle and

@@ -356,7 +356,7 @@ We keep the set as small as possible: every patch is re-audited against a fresh 
 
 ### Adding your own feature
 
-Every feature on this page started as one `.nim` file, and adding another is a small, well-marked job. A community patch gets a switch in the app's own Settings dialog for the cost of one spec, and its setting is persisted per profile in your config, so users keep control without rebuilding anything. If Claude Desktop doesn't behave the way you need it to on your desktop, **spin up your favorite coding agent in a clone of this repo** - [CLAUDE.md](CLAUDE.md) plus the recipe below is enough context to add a patch end to end, and the bundled [skills](.claude/skills/) keep it on this project's rails (Claude Code picks them up automatically, e.g. `/linux` for the compatibility rules).
+Every feature on this page started as one `.nim` file, and adding another is a small, well-marked job. A community patch gets a switch in the app's own Settings dialog for the cost of one spec, and its setting is persisted per profile in your config, so users keep control without rebuilding anything. If Claude Desktop doesn't behave the way you need it to on your desktop, **spin up your favorite coding agent in a clone of this repo** - [AGENTS.md](AGENTS.md) plus the recipe below is enough context to add a patch end to end, and the bundled [skills](.claude/skills/) keep it on this project's rails (Claude Code picks them up automatically, e.g. `/linux` for the compatibility rules).
 
 **The full recipe: [Adding your own feature](PATCHES.md#adding-your-own-feature).**
 

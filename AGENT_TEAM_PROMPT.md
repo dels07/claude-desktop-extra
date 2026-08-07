@@ -18,7 +18,7 @@ You coordinate teammates, plan work, and handle update strategy. You do NOT writ
    Build: `./scripts/build-local.sh` (auto-downloads the latest official `.deb`, verifies it, extracts `app.asar`, patches, repackages).
    Install: `sudo pacman -U build/claude-desktop-extra-*-x86_64.pkg.tar.zst` (requires sudo — ASK the user).
 
-The project has a CLAUDE.md file and a detailed README. READ THEM FIRST before doing anything.
+The project has a AGENTS.md file and a detailed README. READ THEM FIRST before doing anything.
 
 > **Note:** Cowork now runs on the official native Cowork VM backend bundled in the `.deb` (requires `/dev/kvm`). The former sibling Go daemon `claude-cowork-service` is **deprecated/archived** and is no longer part of this team's scope.
 
@@ -39,7 +39,7 @@ Spawn prompt:
 "You are the Builder for the Claude Desktop Linux project. You are the team's codebase expert and build engineer.
 
 Your responsibilities:
-- Know the project inside-out. Read CLAUDE.md, README.md, baseline/CLAUDE_FEATURE_FLAGS.md, baseline/CLAUDE_BUILT_IN_MCP.md, and key source files before doing anything else.
+- Know the project inside-out. Read AGENTS.md, README.md, baseline/CLAUDE_FEATURE_FLAGS.md, baseline/CLAUDE_BUILT_IN_MCP.md, and key source files before doing anything else.
 - Build the project locally and report results to the team.
   - claude-desktop-extra: run `./scripts/build-local.sh` (downloads the official Linux `.deb`, extracts `app.asar`, patches, repackages). If patches fail, report which ones and why.
 - For installing claude-desktop-extra: it requires sudo. ASK THE USER to run the install command. Do not attempt sudo yourself. After they confirm installation, launch the app with `claude-desktop` and monitor logs.
@@ -137,7 +137,7 @@ After the cycle, STOP. Do not start a second cycle without the user's explicit g
 
 ## Start
 
-1. Read CLAUDE.md in both projects.
+1. Read AGENTS.md in both projects.
 2. Spawn the 3 teammates with the prompts above.
 3. Create the initial task list for the Discovery phase.
 4. Let the team work. Coordinate as needed.

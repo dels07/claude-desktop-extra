@@ -2904,7 +2904,7 @@ jobs:
           {
             echo "**Automatic release of v${VERSION} FAILED** - manual attention needed. ([failed run](${RUN_URL}))"
             echo ""
-            echo "Most likely cause: the upstream re-minify moved a patch anchor (fix the regex), or upstream natively implemented something we patch (then remove the patch or convert it to a regression guard - see CLAUDE.md, Patch Strictness Rules). Run the \`/update ${VERSION}\` skill in a Claude Code session in this repo, or follow the prompt in the issue body above."
+            echo "Most likely cause: the upstream re-minify moved a patch anchor (fix the regex), or upstream natively implemented something we patch (then remove the patch or convert it to a regression guard - see AGENTS.md, Patch Strictness Rules). Run the \`/update ${VERSION}\` skill in a Claude Code session in this repo, or follow the prompt in the issue body above."
             echo ""
             echo "The 2-hourly version check will NOT retry while this issue stays open; a successful release run closes it automatically."
           } > /tmp/failure-comment.md

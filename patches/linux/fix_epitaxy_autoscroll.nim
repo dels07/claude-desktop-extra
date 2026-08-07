@@ -44,9 +44,9 @@ const INJECTION =
   """;(function(){
 if(typeof process==="undefined"||!process.versions||!process.versions.electron)return;
 var _app=require("electron").app;
-var __cdbAutoScrollJs=""" & "\"" &
-  escapeJs(FIX_JS) &
-  "\"" & """;
+var __cdbAutoScrollJs=""" &
+  "\"" & escapeJs(FIX_JS) & "\"" &
+  """;
 _app.on("web-contents-created",function(_ev,wc){
 wc.on("dom-ready",function(){
 try{
@@ -65,7 +65,7 @@ proc apply*(input: string): string =
   result = input
 
   # Idempotency: assert OUR injected end-state is present, not merely that some
-  # pre-patch pattern is gone (CLAUDE.md rule 6).
+  # pre-patch pattern is gone (AGENTS.md rule 6).
   if MARKER in result:
     echo "  [OK] epitaxy autoscroll: injection already present (idempotent)"
     return

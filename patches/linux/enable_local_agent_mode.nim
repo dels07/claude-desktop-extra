@@ -128,7 +128,7 @@ proc apply*(input: string): string =
   #
   # Forcing `{status:"supported"}` now would be HARMFUL: it would override
   # upstream's legitimate arch/KVM/bundle checks and claim Cowork works on a
-  # KVM-less or wrong-arch host (runtime failure). So per CLAUDE.md Rule 6 we keep
+  # KVM-less or wrong-arch host (runtime failure). So per AGENTS.md Rule 6 we keep
   # this as a regression guard that POSITIVELY asserts the native Linux support
   # path exists (the linux->"unix" bundle-key mapper AND the support determiner
   # that indexes eo.files[e_A("linux")][arch]). If a future bump re-hardcodes the
@@ -212,7 +212,7 @@ proc apply*(input: string): string =
   #     e.mcpServers)}` class method (which stripped plugins/MCP off SSH
   #     sessions when the flag was off) is gone from the SSH backend class.
   # SSH remote plugin/MCP forwarding is now unconditional - exactly what this
-  # sub-patch used to force. Per CLAUDE.md Rule 6, assert the upstreamed
+  # sub-patch used to force. Per AGENTS.md Rule 6, assert the upstreamed
   # end-state (unconditional resolveSshControllerForMcp) instead of forcing a
   # flag that no longer exists; FAIL loud if upstream ever re-gates it.
   # v1.19367 (code-split): the return callee became a member call
@@ -247,7 +247,7 @@ proc apply*(input: string): string =
   # Guard for the removed platform spoofs (5/6): the real platform must reach
   # claude.ai unspoofed. Assert the header builder still sends the raw
   # `.platform` read (so a stale pre-built binary or a merge resurrection of the
-  # spoof fails loud), per CLAUDE.md Rule 6 (positive end-state assertion).
+  # spoof fails loud), per AGENTS.md Rule 6 (positive end-state assertion).
   let headerUnspoofed = re"""\["anthropic-client-os-platform",[\w$]+\.platform\]"""
   if result.find(headerUnspoofed).isSome:
     echo "  [OK] platform reporting: anthropic-client-os-platform sends the real platform (spoofs removed for issue #173)"

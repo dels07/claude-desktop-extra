@@ -48,7 +48,8 @@
 
 import std/[os, strutils]
 
-const INJECTION = """;(function(){
+const INJECTION =
+  """;(function(){
 if(typeof process==="undefined"||!process.versions||!process.versions.electron)return;
 var _e=require("electron"),_app=_e.app,_fs=require("fs"),_path=require("path");
 function __cdbG_log(m){try{(globalThis.__cdbDiag||function(){})("[cowork-glow] "+m)}catch(e){}}
@@ -163,7 +164,7 @@ proc apply*(input: string): string =
   result = input
 
   # Idempotency: assert OUR injected end-state is present, not merely that some
-  # pre-patch pattern is gone (CLAUDE.md rule 6).
+  # pre-patch pattern is gone (AGENTS.md rule 6).
   if MARKER in result:
     echo "  [OK] cowork glow: injection already present (idempotent)"
     return

@@ -117,7 +117,7 @@ Copy-paste this into Claude Code to analyze what changed between two versions:
 >    - Old: `/tmp/claude-old/app/.vite/build/index.js`
 >    - New: `/tmp/claude-new/app/.vite/build/index.js`
 >
->    (If not yet extracted, extract them first using the steps in CLAUDE.md § "Extract and Test Locally".)
+>    (If not yet extracted, extract them first using the steps in AGENTS.md § "Extract and Test Locally".)
 >
 >    Since v1.19367.0 the main bundle is code-split: `index.js` is a loader stub and the
 >    code lives in `index.chunk-<hash>.js` siblings + `index.pre.js`. Wherever a command

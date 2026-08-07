@@ -38,7 +38,7 @@ If patches fail (upstream renamed identifiers / refactored / removed a feature):
    patches/<group>/<patch_name> /tmp/test-index.js; echo "exit=$?"
    node --check /tmp/test-index.js
    ```
-4. Re-run the build until all patches pass. **Every sub-patch must succeed or `quit(1)`** - never `[WARN]`+continue. If a feature was upstreamed, **remove the patch** (`git rm`) - once nothing of ours is injected, a patch that only asserts upstream's own behavior is not maintaining our modification. See CLAUDE.md Rule 4/6. Pure assert-only regression-guard patches were retired 2026-07-15.
+4. Re-run the build until all patches pass. **Every sub-patch must succeed or `quit(1)`** - never `[WARN]`+continue. If a feature was upstreamed, **remove the patch** (`git rm`) - once nothing of ours is injected, a patch that only asserts upstream's own behavior is not maintaining our modification. See AGENTS.md Rule 4/6. Pure assert-only regression-guard patches were retired 2026-07-15.
 
 ## Step 2 - Linux-compat analysis (new gates?)
 Diff old vs new for newly darwin/win32-gated features that need Linux support (set `OLD`/`NEW` to the two index.js paths):

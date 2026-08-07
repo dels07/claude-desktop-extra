@@ -81,7 +81,7 @@ fresh-upstream ──▶ update ──▶ deploy        new-version pipeline
 ### `/debug` - collect evidence, then diagnose
 **What:** `/debug <what's broken>` pulls the newest `local-agent-mode-sessions/.../audit.jsonl` (your last prompt + the model's tool calls/errors - the source of truth for Cowork/Dispatch runs), greps whichever `~/.config/Claude/logs/` files exist (including the bundled backend's `cowork_vm_node.log`), then asks you for anything else the specific issue needs before forming a hypothesis.
 **When:** A feature misbehaves and you want it grounded in real logs, not speculation.
-**Why:** Encodes the dispatch/cowork debug workflow from `CLAUDE.md` so the right evidence is gathered every time.
+**Why:** Encodes the dispatch/cowork debug workflow from `AGENTS.md` so the right evidence is gathered every time.
 
 ## Conventions for editing / adding skills
 

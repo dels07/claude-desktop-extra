@@ -24,6 +24,8 @@ The README had grown to the point where finding out *what* the project offers me
 
 The patch catalog moved to [`PATCHES.md`](PATCHES.md), one table per directory, with every description tightened to one sentence saying what the patch does and why you would want it - the mechanism it depends on stays documented in the patch source, which each row now links to. Custom Themes, Multiple Profiles, Quick Entry, Cowork setup and Feature Flag Overrides each moved into `docs/`, following the pattern Computer Use already used. Every README heading stayed exactly where it was, so existing links into the README still land on the right section.
 
+Installation is now a list of collapsed per-distro sections - open the one you are on instead of scrolling past eight you are not. The badges at the top still jump straight to the right one. The hand-written table of contents is gone; GitHub's own outline button does the same job without going stale.
+
 ### Patches are grouped by what they are for
 
 `patches/` was a flat directory of 45 `.nim` files where nothing distinguished a Linux bug fix from an optional feature. It is now three:

@@ -25,34 +25,14 @@ Everything else - Chat, Cowork, Claude Code, Browser Tools, 3P/enterprise infere
 
 > **If you run Ubuntu 22.04+ / Debian 12+,** Anthropic's [official `.deb`](https://code.claude.com/docs/en/desktop-linux) installs the base app directly. Use this project if you're on Arch/Fedora/RHEL/Nix/AppImage, or if you want the five value-adds and Linux fixes above.
 
-<details>
-<summary><b>Table of contents</b></summary>
-
-- [Installation](#installation)
-- [Computer Use](#computer-use)
-- [Custom Themes](#custom-themes)
-- [Multiple Profiles](#multiple-profiles)
-- [Quick Entry](#quick-entry)
-- [Cowork setup (needs /dev/kvm)](#cowork-setup-needs-devkvm)
-- [Third-Party / Enterprise Inference](#third-party--enterprise-inference)
-- [Patches](#patches)
-- [Command-line flags](#command-line-flags)
-- [Environment Variables](#environment-variables)
-- [Feature Flag Overrides (advanced)](#feature-flag-overrides-advanced)
-- [Debugging](#debugging)
-- [Known Limitations](#known-limitations)
-- [Automation](#automation)
-- [Repository Structure](#repository-structure)
-- [See Also](#see-also)
-- [Legal Notice](#legal-notice)
-
-</details>
-
 ## Installation
 
 Pick your distro below. [Computer Use](#computer-use) works out of the box everywhere - all backends are bundled, nothing to install. The only optional dependency to care about is **Cowork** (agent workspace VM), listed per distro - it needs QEMU/KVM on the host, see [Cowork setup](docs/cowork.md).
 
-### Arch Linux / Manjaro (Pacman Repository)
+<a name="arch-linux--manjaro-pacman-repository"></a>
+<details>
+<summary><b>Arch Linux / Manjaro (Pacman Repository)</b></summary>
+
 ```bash
 # Add repository + import signing key (one-time setup)
 curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-pacman.sh | sudo bash
@@ -96,6 +76,7 @@ sudo pacman -Syu claude-desktop-extra
 ```
 
 The fingerprint check is what makes this trustworthy (see [Verifying the repository signing key](#verifying-the-repository-signing-key)). Both key steps are required: under `SigLevel = Required` pacman rejects the repo until the key carries your local signature, and `--lsign-key` fails with a cryptic "There is no secret key available to sign with" if the keyring was never initialised, hence the `--init`.
+
 </details>
 
 <details>
@@ -109,9 +90,14 @@ base=https://github.com/patrickjaja/claude-desktop-extra/releases/latest/downloa
 curl -fsSL -O "$base/PKGBUILD" -O "$base/claude-desktop-extra.install"
 makepkg -si
 ```
+
 </details>
 
-### Debian / Ubuntu (APT Repository)
+</details>
+
+<a name="debian--ubuntu-apt-repository"></a>
+<details>
+<summary><b>Debian / Ubuntu (APT Repository)</b></summary>
 
 > **Requires Ubuntu 22.04+ / Debian 12+** (glibc 2.34 or newer). Debian 11 (bullseye) is no longer supported.
 
@@ -133,9 +119,15 @@ Updates are automatic via `sudo apt update && sudo apt upgrade`.
 wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra_1.24012.11-2_amd64.deb
 sudo dpkg -i claude-desktop-extra_*_amd64.deb
 ```
+
 </details>
 
-### Fedora / RHEL (DNF Repository)
+</details>
+
+<a name="fedora--rhel-dnf-repository"></a>
+<details>
+<summary><b>Fedora / RHEL (DNF Repository)</b></summary>
+
 ```bash
 # Add repository (one-time setup)
 curl -fsSL https://patrickjaja.github.io/claude-desktop-extra/install-rpm.sh | sudo bash
@@ -154,9 +146,15 @@ Updates are automatic via `sudo dnf upgrade`.
 wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra-1.24012.11-2.x86_64.rpm
 sudo dnf install ./claude-desktop-extra-*.x86_64.rpm
 ```
+
 </details>
 
-### NixOS / Nix
+</details>
+
+<a name="nixos--nix"></a>
+<details>
+<summary><b>NixOS / Nix</b></summary>
+
 ```bash
 # Try without installing
 nix run github:patrickjaja/claude-desktop-extra
@@ -178,6 +176,7 @@ nix profile install github:patrickjaja/claude-desktop-extra
   ];
 }
 ```
+
 </details>
 
 > **Note:** Update by running `nix flake update` to pull the latest version. `nix run` always fetches the latest.
@@ -191,7 +190,11 @@ nix profile install github:patrickjaja/claude-desktop-extra
 >
 > **NixOS Computer Use caveat:** the static bridges (X11 / XWayland / Sway / Hyprland / Niri) run as-is; the glibc-dynamic GNOME/KDE bridges do not - see [Computer Use dependencies](docs/computer-use-dependencies.md#nixos) for the `.override` workaround. If your flake pins a release older than v1.18286.0, virtiofsd and OVMF need manual exposure - see the notes in [`packaging/nix/package.nix`](packaging/nix/package.nix).
 
-### AppImage (Any Distro)
+</details>
+
+<a name="appimage-any-distro"></a>
+<details>
+<summary><b>AppImage (Any Distro)</b></summary>
 
 Works on standard and **immutable/atomic distros** - Bazzite, Fedora Silverblue/Kinoite, SteamOS, Universal Blue, NixOS (without the Nix package), and any other glibc-based Linux.
 
@@ -208,7 +211,12 @@ chmod +x Claude_Desktop-*-x86_64.AppImage
 >
 > **Optional deps.** For **Cowork** (VM), install QEMU + UEFI firmware + virtiofsd from your host's repos - per-distro commands in [Cowork setup](docs/cowork.md).
 
-### From Source
+</details>
+
+<a name="from-source"></a>
+<details>
+<summary><b>From Source</b></summary>
+
 ```bash
 git clone https://github.com/patrickjaja/claude-desktop-extra.git
 cd claude-desktop-extra
@@ -219,15 +227,25 @@ cd claude-desktop-extra
 >
 > **Optional deps.** A source build installs the native package for your distro, so the optional deps match that distro's section above; Cowork commands are in [Cowork setup](docs/cowork.md) (on Arch install them by hand - pacman doesn't pull `optdepends`).
 
-### ARM64 / aarch64 (Raspberry Pi 5, NVIDIA DGX Spark, Jetson, etc.)
+</details>
+
+<a name="arm64--aarch64-raspberry-pi-5-nvidia-dgx-spark-jetson-etc"></a>
+<details>
+<summary><b>ARM64 / aarch64 (Raspberry Pi 5, NVIDIA DGX Spark, Jetson, etc.)</b></summary>
 
 ARM64 `.deb`, `.rpm`, AppImage, and Nix packages are available for **Raspberry Pi 5**, **NVIDIA DGX Spark** (Ubuntu 24.04 arm64), and **Jetson** (JetPack/Ubuntu 22.04 arm64). The APT and DNF repos serve both x86_64 and arm64 - your package manager picks the correct architecture automatically. Install exactly as above.
 
-### Migrating from claude-desktop-bin
+</details>
+
+<a name="migrating-from-claude-desktop-bin"></a>
+<details>
+<summary><b>Migrating from claude-desktop-bin</b></summary>
 
 The project was renamed from `claude-desktop-bin` to `claude-desktop-extra`, and the switch is automatic: the package replaces itself on your next regular upgrade (apt, dnf, and pacman all handle it), and your themes / flag overrides (`claude-desktop-bin.jsonc`) are migrated on first launch.
 
 One exception: an existing `[claude-desktop-bin]` section in `/etc/pacman.conf` points at a temporary transition mirror - replace it with the `[claude-desktop-extra]` stanza from the [Arch section above](#arch-linux--manjaro-pacman-repository) (same `SigLevel`, same signing key; aarch64: `[claude-desktop-extra-aarch64]`).
+
+</details>
 
 ### Verifying the repository signing key
 

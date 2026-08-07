@@ -130,7 +130,7 @@ Updates are automatic via `sudo apt update && sudo apt upgrade`.
 <summary>Manual .deb install (without APT repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra_1.24012.9-14_amd64.deb
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra_1.24012.11-1_amd64.deb
 sudo dpkg -i claude-desktop-extra_*_amd64.deb
 ```
 </details>
@@ -151,7 +151,7 @@ Updates are automatic via `sudo dnf upgrade`.
 <summary>Manual .rpm install (without DNF repo)</summary>
 
 ```bash
-wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra-1.24012.9-14.x86_64.rpm
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/claude-desktop-extra-1.24012.11-1.x86_64.rpm
 sudo dnf install ./claude-desktop-extra-*.x86_64.rpm
 ```
 </details>
@@ -199,7 +199,7 @@ The `claude://` protocol handler (needed for OAuth sign-in) is **automatically r
 
 ```bash
 # Download from GitHub Releases
-wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/Claude_Desktop-1.24012.9-x86_64.AppImage
+wget https://github.com/patrickjaja/claude-desktop-extra/releases/latest/download/Claude_Desktop-1.24012.11-x86_64.AppImage
 chmod +x Claude_Desktop-*-x86_64.AppImage
 ./Claude_Desktop-*-x86_64.AppImage
 ```

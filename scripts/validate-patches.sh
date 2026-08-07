@@ -27,13 +27,20 @@ if [ ! -d "$APP_CONTENTS/.vite" ]; then
     echo "Error: Invalid app.asar.contents directory"
     echo "Expected to find .vite/ directory in: $APP_CONTENTS"
     echo ""
-    echo "Usage: $0 <path_to_app.asar.contents>"
+    echo "Usage: $0 <path_to_app.asar.contents> [path_to_deb_tree]"
     echo ""
     echo "Example:"
     echo "  asar extract app.asar app.asar.contents"
     echo "  $0 ./app.asar.contents"
+    echo ""
+    echo "nim-dir patches (ion-dist) target the .deb's resources tree, not"
+    echo "app.asar. Pass the extracted tree (e.g. ./tmp/extract/usr/lib/claude-desktop)"
+    echo "as the second argument; without it a sibling ../extract/usr/lib/claude-desktop"
+    echo "of app.asar.contents is probed, and if neither exists those patches SKIP."
     exit 1
 fi
+
+DEB_TREE="${2:-}"
 
 # Compile Nim patches first (required for validation)
 echo "Compiling Nim patches..."
@@ -97,9 +104,26 @@ for patch_file in "$PATCHES_DIR"/*/*.nim "$PATCHES_DIR"/*/*.js; do
     fi
 
     if [ "$patch_type" = "nim-dir" ]; then
+        # nim-dir targets live in the .deb's resources tree, NOT inside
+        # app.asar - they can never resolve under $APP_CONTENTS. Probe the
+        # explicit deb tree argument, then the conventional sibling layout
+        # (tmp/app.asar.contents next to tmp/extract/), and only SKIP - not
+        # FAIL - when neither is available: real builds exercise these
+        # patches via build-patched-tarball.sh against the full tree.
         if [ -z "$actual_target" ] || [ ! -d "$actual_target" ]; then
-            echo "  Status: FAIL (target directory not found)"
-            FAILED=$((FAILED + 1))
+            sibling_tree="$(dirname "$APP_CONTENTS")/extract/usr/lib/claude-desktop"
+            for tree in "$DEB_TREE" "$sibling_tree"; do
+                [ -n "$tree" ] && [ -d "$tree/$target" ] || continue
+                actual_target="$tree/$target"
+                break
+            done
+        fi
+        if [ -z "$actual_target" ] || [ ! -d "$actual_target" ]; then
+            echo "  Status: SKIP (target lives in the .deb tree, not app.asar;"
+            echo "          pass the extracted tree as 2nd arg or extract the .deb"
+            echo "          to a sibling ../extract/ - build-patched-tarball.sh"
+            echo "          exercises this patch in real builds)"
+            SKIPPED=$((SKIPPED + 1))
             echo ""
             continue
         fi

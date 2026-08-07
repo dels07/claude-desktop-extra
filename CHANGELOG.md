@@ -34,6 +34,10 @@ The ten feature test harnesses sat flat in `scripts/` and nothing ever ran them 
 
 A new `scripts/run-feature-tests.sh` runs them all, reports PASS / FAIL / SKIP per harness, and fails the run on any failure; `scripts/run-feature-tests.sh community` runs one group. Like `EXPECTED_PATCH_COUNT`, it pins `EXPECTED_TEST_HARNESSES` and refuses to run if discovery finds a different number, so a harness cannot go missing quietly. CI runs the script in the `lint-scripts` job, where the Nim patch binaries the tests need have just been compiled - on every pull request and every release. `scripts/validate-patches.sh` now delegates to the same script instead of keeping its own copy of the suite list.
 
+### validate-patches.sh can finally exit green
+
+The one patch whose target lives in the .deb's resources tree instead of inside app.asar (`fix_ion_dist_linux`) made every full local `validate-patches.sh` run end with a failure it could do nothing about. The script now resolves such targets against an extracted .deb tree (second argument, or the conventional `tmp/extract/` sibling) and validates the patch for real; without a tree it reports SKIP instead of FAIL. A healthy checkout now validates 55/55 with exit 0.
+
 ### CI: the smoke test no longer fails on its own cleanup
 
 The smoke test could report a pass and then fail the job anyway: Electron's shutdown crashes in headless containers, and crash reporting kept writing into the temporary profile while the test was deleting it. Cleanup now waits for the process tree to end and retries the delete, and a cleanup hiccup can no longer override the test verdict.

@@ -20,6 +20,12 @@ The minifier switch also exposed one latent false success: `add_growthbook_overr
 
 The key catalog now carries the six keys upstream added: `skillCreationEnabled`, `trustBootstrapDelivery`, `endUserAttribution` (renamed from all-lowercase `enduserAttribution`, which remains readable as a legacy key), the `inferenceGatewayOidcAuthFlow`/`inferenceVertexWorkforceAuthFlow` sign-in flow enums, and `updateViaUpdatesHost` (marked `@next` upstream, listed but not yet active).
 
+### Gaming themes: all six spinners redrawn as retro pixel art
+
+The gaming themes' loading spinners were flat single-color glyphs (and the Dragon Ball a flat orange blob). Each is now a proper two-frame pixel sprite in the spirit of its game, drawn from period references on a 14-21px grid: the four PlayStation button symbols orbiting in their classic colors, a Game Boy DMG with a blinking screen, a Final Fantasy Black Mage casting sparkles, Link swinging his sword, a Warcraft peon striking a gold pile, and a shimmering 4-star Dragon Ball. All of them stay flat-fill paths with the existing `flip` animation, so nothing changes in the renderer.
+
+![The Black Mage spinner on the Final Fantasy theme](themes/ff/2026-08-08_22-23.png)
+
 ### Feature flag catalog refreshed for v1.26832.0
 
 `claude-desktop-extra.jsonc`'s commented-out flag list gains 14 new flags (among them the CliGovernor `throttleEnabled`/`pressureEvictionEnabled` pair, a renderer crash-loop watchdog, and `resolveCloudBranch`) and drops 4 that upstream removed.

@@ -3,7 +3,7 @@
 # Register stub IPC handlers for ComputerUseTcc on Linux.
 # Prevents "No handler registered" errors for accessibility/screen recording.
 
-import std/[os, strformat]
+import std/[os, strformat, strutils]
 import regex
 
 proc replaceFirst(
@@ -35,8 +35,8 @@ proc extractEipcUuid(content: string): string =
 
 proc buildStubHandlersJs(eipcPrefix: string): string =
   result =
-    "if(process.platform===\"linux\"){" & "const _ipc=require(\"electron\").ipcMain;" &
-    "const _P=\"" & eipcPrefix & "\";" &
+    "/*__CDB_TCC_STUBS__*/if(process.platform===\"linux\"){" &
+    "const _ipc=require(\"electron\").ipcMain;" & "const _P=\"" & eipcPrefix & "\";" &
     "_ipc.handle(_P+\"getState\",()=>({accessibility:\"not_applicable\",screenRecording:\"not_applicable\"}));" &
     "_ipc.handle(_P+\"requestAccessibility\",()=>{});" &
     "_ipc.handle(_P+\"requestScreenRecording\",()=>{});" &
@@ -46,6 +46,12 @@ proc buildStubHandlersJs(eipcPrefix: string): string =
 
 proc apply*(input: string): string =
   result = input
+
+  # Idempotency: assert OUR injected stub block is present (positive end-state),
+  # not merely that the app.on(ready) anchor is gone.
+  if "/*__CDB_TCC_STUBS__*/" in result:
+    echo "  [OK] ComputerUseTcc stub handlers already injected (idempotent)"
+    return result
 
   var uuid = extractEipcUuid(result)
   if uuid == "":
@@ -58,7 +64,8 @@ proc apply*(input: string): string =
 
   let stubJs = buildStubHandlersJs(eipcPrefix)
 
-  let pattern = re2"(app\.on\(""ready"",async\(\)=>\{)"
+  # v1.26832.0: string literals are backticks now (`app.on(`ready`,async()=>{`).
+  let pattern = re2"(app\.on\([""`]ready[""`],async\(\)=>\{)"
   var count = result.replaceFirst(
     pattern,
     proc(m: RegexMatch2, s: string): string =

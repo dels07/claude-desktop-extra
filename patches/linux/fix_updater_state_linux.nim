@@ -17,16 +17,19 @@ import std/[os]
 import regex
 
 proc apply*(input: string): string =
-  # Check if already patched
+  # Check if already patched.
+  # Since v1.26832.0 the minifier emits template literals for most string
+  # literals (case`idle`) and the state enum is reached through a namespace
+  # alias (D.r.Idle), so accept either quoting and one-or-more member hops.
   let already =
-    re2"""case"idle":return\{status:[\w$]+\.[\w$]+,version:"",versionNumber:""\}"""
+    re2"""case["`]idle["`]:return\{status:[\w$]+(?:\.[\w$]+)+,version:"",versionNumber:""\}"""
   if input.contains(already):
     echo "  [OK] Updater idle state: already patched (skipped)"
     return input
 
-  # Pattern: case"idle":return{status:<var>.Idle}
+  # Pattern: case"idle":return{status:<var>.Idle}  (or case`idle` / <ns>.<var>.Idle)
   # We need to add version:"",versionNumber:"" before the closing brace.
-  let pattern = re2"""(case"idle":return\{status:[\w$]+\.[\w$]+)\}"""
+  let pattern = re2"""(case["`]idle["`]:return\{status:[\w$]+(?:\.[\w$]+)+)\}"""
   var count = 0
   result = input.replace(
     pattern,

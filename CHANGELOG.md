@@ -2,6 +2,28 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-08
+
+### Claude Desktop v1.26832.0 - upstream switched its minifier, 31 of 45 patches re-anchored
+
+Anthropic's v1.25927.0/v1.26832.0 releases (issue #218) came out of a new bundler toolchain, and the auto-release failed loudly as designed. Three output changes invalidated most of our regex anchors at once: string literals are now backtick template literals (`` process.platform===`darwin` `` instead of `"darwin"`), the `"use strict";` prologue is gone from bundle heads (files open with a Sentry preamble), and the code-split bundle gained a second chunk family (`index2.chunk-*.js`, 130 files, next to 195 `index.chunk-*.js`).
+
+All 31 affected patches are re-anchored with quote-tolerant patterns (`` ["`] `` character classes), so they survive either quoting style. The patch orchestrator and validator now stage both chunk families as one logical bundle. `fix_computer_use_linux` additionally lost its silent-failure path: a sub-patch that does not match now exits nonzero instead of quietly writing the file back unpatched.
+
+Substantively this release is the same app re-emitted through a new toolchain: the capability map (36 `status:"unavailable"` entries), the built-in MCP server roster, the Cowork VM probe shapes and every stable feature anchor are count-identical to v1.24012. There is still no native Linux Computer Use backend, so all four bundled bridges stay load-bearing. Upstream did ship new native Linux pieces alongside: a `cowork-linux-helper` binary and a raw `smol-bin.x64.img` VM image (the Cowork VM path keeps maturing on Linux), plus a `chrome-native-host` native-messaging binary for the Claude browser extension.
+
+**One sub-patch retired as upstreamed:** the `.deb` now bundles that `chrome-native-host` binary in `resources/`, exactly where the packaged app looks for it - so `fix_browser_tools_linux` no longer redirects the native-host path to the Claude Code host under `~/.claude` (that redirect existed only because the binary used to be absent from the official Linux build). Claude in Chrome now runs on upstream's own bundled native host; our patch still adds Chromium, Brave, Vivaldi and Opera discovery, the extension auto-install path and the DevTools opener.
+
+The minifier switch also exposed one latent false success: `add_growthbook_overrides` anchored its injection on `"use strict";` via plain string search, and the only remaining occurrence of that string now sits inside a vendored template literal - the injection landed as inert string content while reporting success. It now prepends at the bundle head and asserts its own injected marker. The other head-injecting patches already used a safe prefix check with a prepend fallback and needed no change; all ten were verified together in orchestrator order, twice for idempotency, with `node --check` clean on all 326 re-split bundle parts.
+
+### Settings → Extra → Deployment follows the new managed-settings schema
+
+The key catalog now carries the six keys upstream added: `skillCreationEnabled`, `trustBootstrapDelivery`, `endUserAttribution` (renamed from all-lowercase `enduserAttribution`, which remains readable as a legacy key), the `inferenceGatewayOidcAuthFlow`/`inferenceVertexWorkforceAuthFlow` sign-in flow enums, and `updateViaUpdatesHost` (marked `@next` upstream, listed but not yet active).
+
+### Feature flag catalog refreshed for v1.26832.0
+
+`claude-desktop-extra.jsonc`'s commented-out flag list gains 14 new flags (among them the CliGovernor `throttleEnabled`/`pressureEvictionEnabled` pair, a renderer crash-loop watchdog, and `resolveCloudBranch`) and drops 4 that upstream removed.
+
 ## 2026-08-07
 
 ### Settings → Extra: our switches and Anthropic's flags are now two separate pages

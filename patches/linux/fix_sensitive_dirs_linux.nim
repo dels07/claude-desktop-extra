@@ -66,7 +66,11 @@ proc apply*(input: string): string =
     # Linux dirs into BOTH — polluting `eLn` (which holds only absolute j.join()
     # paths) with 3 bare relative strings. Requiring the trailing `;` restricts the
     # match to the correct sensitive-dirs array. EXPECT EXACTLY ONE match.
-    let pattern = re2"""("PowerShell"\)\]:\[\])(\];)"""
+    # v1.26832.0: string literals became backticks (`(0,E.join)(`OneDrive`,
+    # `Documents`,`PowerShell`)]:[]];function fe(){...`), so accept either quoting.
+    # The disambiguation above still holds: the unrelated per-home-root array ends
+    # `]:[]]),` (expression continues), only the sensitive-dirs array ends `];`.
+    let pattern = re2"""([""`]PowerShell[""`]\)\]:\[\])(\];)"""
 
     var count = 0
     result = result.replace(

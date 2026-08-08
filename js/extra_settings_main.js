@@ -337,12 +337,13 @@
     };
   }
 
-  // The managed-config key catalog of Claude Desktop v1.24012.9, read out of the
+  // The managed-config key catalog of Claude Desktop v1.26832.0, read out of the
   // bundle's own schema (flat key, zod leaf type, scopes, title). Upstream drives
   // its 3P Setup wizard from that schema; we cannot reach it from here (it is
   // module-scoped in index.pre.js), so this is a PINNED COPY and is therefore
   // version-sensitive: re-extract it on an upstream bump with
-  //   rg -ao 'flatKey:"[A-Za-z0-9_]+"' .vite/build/index.pre.js
+  //   rg -ao 'flatKey:[`"][A-Za-z0-9_]+[`"]' .vite/build/index.pre.js
+  // (since v1.26832.0 the minifier emits backtick string literals)
   // A key that no longer exists is silently dropped by the local config reader,
   // but it INVALIDATES a whole /etc managed file - which is exactly why the page
   // shows what it wrote and where. (betaFeaturesEnabled, still in older 3P docs,
@@ -377,6 +378,8 @@
       label: "Gateway auth scheme", options: ["bearer", "x-api-key", "auto", "sso"] },
     { key: "inferenceGatewayOidc", kind: "json", group: "connection", scope: "3p", only: "gateway", secret: true,
       label: "Gateway SSO IdP (OIDC)" },
+    { key: "inferenceGatewayOidcAuthFlow", kind: "enum", group: "connection", scope: "3p", only: "gateway",
+      label: "Gateway sign-in flow", options: ["browser", "broker"] },
 
     { key: "inferenceVertexProjectId", kind: "text", group: "connection", scope: "3p", only: "vertex",
       label: "GCP project ID" },
@@ -398,6 +401,8 @@
       label: "Workforce Identity audience" },
     { key: "inferenceVertexWorkforceOidc", kind: "json", group: "connection", scope: "3p", only: "vertex", secret: true,
       label: "Workforce Identity IdP (OIDC)" },
+    { key: "inferenceVertexWorkforceAuthFlow", kind: "enum", group: "connection", scope: "3p", only: "vertex",
+      label: "Workforce Identity sign-in flow", options: ["browser", "broker"] },
     { key: "inferenceVertexWorkforceUserProject", kind: "text", group: "connection", scope: "3p", only: "vertex",
       label: "Workforce Identity billing project" },
 
@@ -482,6 +487,8 @@
       label: "Built-in tool policy", note: "JSON object of tool name to allow / ask / deny." },
     { key: "disableBundledSkills", kind: "bool", group: "sandbox", scope: "both",
       label: "Disable bundled skills and workflows" },
+    { key: "skillCreationEnabled", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Allow user-created skills" },
     { key: "disableDeepLinkRegistration", kind: "bool", group: "sandbox", scope: "3p",
       label: "Disable claude:// deep links" },
     { key: "disableWslSessions", kind: "bool", group: "sandbox", scope: "both",
@@ -548,7 +555,11 @@
       label: "Auto-update enforcement window (h)", max: 72 },
     { key: "deploymentOrganizationUuid", kind: "text", group: "telemetry", scope: "3p",
       label: "Organization UUID" },
-    { key: "enduserAttribution", kind: "bool", group: "telemetry", scope: "3p", label: "End-user attribution" },
+    { key: "endUserAttribution", kind: "bool", group: "telemetry", scope: "3p", label: "End-user attribution",
+      note: "Renamed upstream in v1.24012 (the all-lowercase enduserAttribution is still read as a legacy key)." },
+    { key: "updateViaUpdatesHost", kind: "bool", group: "telemetry", scope: "3p",
+      label: "Check for updates on releases.claude.ai",
+      note: "Upstream marks this @next - present in the schema but not active in this version yet." },
 
     // --- appearance & branding ---------------------------------------------
     { key: "deploymentDisplayName", kind: "text", group: "appearance", scope: "3p",
@@ -567,6 +578,9 @@
       label: "Use the bootstrap config", dflt: true },
     { key: "bootstrapOidc", kind: "json", group: "source", scope: "3p", secret: true,
       label: "Bootstrap OIDC parameters" },
+    { key: "trustBootstrapDelivery", kind: "bool", group: "source", scope: "3p",
+      label: "Trust bootstrap-delivered settings",
+      note: "Skips the per-user consent prompt for bootstrap-delivered sign-in targets." },
     { key: "claudeAiImport", kind: "bool", group: "source", scope: "3p", label: "Allow claude.ai data import" }
   ];
 

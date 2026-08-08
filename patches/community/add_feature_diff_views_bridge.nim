@@ -10,12 +10,18 @@
 # SECURITY: the page behind this preload is remote code. Fixed methods, one
 # channel each - no generic passthrough. Main side re-validates everything.
 #
-# Break risk: VERY LOW - no regex against minified app code, only the stable
-# leading "use strict"; of the preload bundle.
+# Break risk: VERY LOW - no regex against minified app code; the snippet is a
+# self-contained IIFE prepended to the head of the preload bundle.
 
 import std/[os, strutils]
 
 const BRIDGE_JS = staticRead("../../js/diff_views_bridge.js")
+
+# Directive prologues only take effect when they are the very first statement,
+# so if upstream ever re-introduces one we must inject *after* it rather than
+# in front of it. As of v1.26832.0 the bundle has none (it opens with the
+# Sentry release IIFE), so position 0 is the injection point.
+const DIRECTIVES = ["\"use strict\";", "'use strict';"]
 
 # Positive end-state markers (Rule 6): the build tag and the exposed global.
 const MARKERS = ["__cdb_diff_views_bridge", "exposeInMainWorld(\"cdbDiffViews\""]
@@ -35,13 +41,24 @@ proc apply*(input: string): string =
     echo "  [FAIL] Partial injection (" & $present & "/" & $MARKERS.len &
       " markers) -- refusing to patch on top; re-audit the preload bundle"
     quit(1)
-  let strictPrefix = "\"use strict\";"
-  if result.startsWith(strictPrefix):
-    result = strictPrefix & "\n" & BRIDGE_JS & result[strictPrefix.len .. ^1]
-    echo "  [OK] cdbDiffViews bridge inserted after \"use strict\""
-  else:
-    echo "  [FAIL] mainView.js does not start with \"use strict\"; -- re-audit"
+  # Precondition: still a sandboxed CommonJS preload that pulls in electron.
+  # Were it ever to become an ESM bundle, the injected require()/contextBridge
+  # IIFE would be wrong and must be re-authored instead of silently prepended.
+  if """require("electron")""" notin result and "require(`electron`)" notin result:
+    echo "  [FAIL] mainView.js does not require electron -- preload bundle shape changed (ESM?), re-audit"
     quit(1)
+  var prologue = 0
+  for d in DIRECTIVES:
+    if result.startsWith(d):
+      prologue = d.len
+      break
+  result =
+    result[0 ..< prologue] & (if prologue > 0: "\n" else: "") & BRIDGE_JS &
+    result[prologue .. ^1]
+  if prologue > 0:
+    echo "  [OK] cdbDiffViews bridge inserted after the directive prologue"
+  else:
+    echo "  [OK] cdbDiffViews bridge prepended at the head of the preload"
   if markersPresent(result) != MARKERS.len:
     echo "  [FAIL] markers absent after patching"
     quit(1)

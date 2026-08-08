@@ -199,7 +199,7 @@ sudo chmod 644 /etc/claude-desktop/managed-settings.json
 
 > **Surface toggles** (all `scopes:["3p"]`): `chatTabEnabled` brings back the **Chat** tab (the claude.ai web surface), `coworkTabEnabled` the **Cowork** tab, and `isClaudeCodeForDesktopEnabled` the **Code** tab. Omit one to hide that surface. At least one surface has to stay on - the app re-enables Cowork if you switch them all off. See the [maximum example](#maximum-managed-settingsjson-every-key) below for the full set.
 
-> **Every key in this file must be one the running build knows.** A single unrecognized key makes Claude Desktop discard the **whole** managed file (`[managedConfig] Ignoring …: unrecognized configuration key`) and fall back to no policy at all - so drop keys you copied from an older deployment rather than leaving them in "just in case". `betaFeaturesEnabled` is one of those: it was accepted by builds up to ~v1.14271 and is gone in v1.24012.9. The [Deployment panel](#route-a-the-in-app-deployment-panel) renders the current build's key set and refuses to write anything outside it, which is the cheapest way to check a file.
+> **Every key in this file must be one the running build knows.** A single unrecognized key makes Claude Desktop discard the **whole** managed file (`[managedConfig] Ignoring …: unrecognized configuration key`) and fall back to no policy at all - so drop keys you copied from an older deployment rather than leaving them in "just in case". `betaFeaturesEnabled` is one of those: it was accepted by builds up to ~v1.14271 and is gone since v1.24012.9 (same in v1.26832.0). The [Deployment panel](#route-a-the-in-app-deployment-panel) renders the current build's key set and refuses to write anything outside it, which is the cheapest way to check a file.
 
 **4. Restart and verify** (see [Verifying it worked](#verifying-it-worked) for the full log signature):
 
@@ -217,7 +217,7 @@ You should see `[custom-3p] 3P mode active { provider: 'gateway' }` and an ident
 
 ## Maximum `managed-settings.json` (every key)
 
-The quickstart above is intentionally minimal. Below is a **feature-complete** gateway config that turns on every surface and shows the governance, telemetry, sandbox, and plugin knobs an enterprise rollout typically wants. Every key here is a real managed-config setting in v1.24012.9 (`scopes:["3p"]` or `["3p","1p"]`); add only the ones you need - and only ones the running build knows, or the whole file is ignored. Settings → **Extra** → **Deployment** lists this build's full key set with the same grouping. Keys marked **secret** must hold real credentials - keep this file readable only as needed and never commit real values.
+The quickstart above is intentionally minimal. Below is a **feature-complete** gateway config that turns on every surface and shows the governance, telemetry, sandbox, and plugin knobs an enterprise rollout typically wants. Every key here is a real managed-config setting in v1.26832.0 (`scopes:["3p"]` or `["3p","1p"]`); add only the ones you need - and only ones the running build knows, or the whole file is ignored. Settings → **Extra** → **Deployment** lists this build's full key set with the same grouping. Keys marked **secret** must hold real credentials - keep this file readable only as needed and never commit real values.
 
 ```jsonc
 {

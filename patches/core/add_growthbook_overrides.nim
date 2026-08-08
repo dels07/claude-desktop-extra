@@ -18,13 +18,22 @@
 #
 # Sub-patches:
 #   A: inject js/growthbook_overrides.js (defines globalThis.__cdbApplyGbOverrides)
-#      after the first "use strict"; (runs before any chunk code)
-#   B: hook the features-store setter: function X(e){const t=lf;lf=e,AP=!0;...
+#      at the very top of index.js (runs before any chunk code)
+#   B: hook the features-store setter: function X(e){let t=Mx;Mx=e,Nx=!0;...
 #      anchored on the stable log string "[growthbook] loaded %d features (%d changed)"
 #
-# Break risk: LOW - A uses the "use strict" anchor shared with custom_themes;
-# B anchors on a log string that has been stable across releases. If upstream
-# splits the setter or renames the log line, B fails loud.
+# Sub-patch A used to insert after the leading `"use strict";` directive. That
+# anchor DIED in v1.26832.0: the bundle now opens with a Sentry IIFE and has no
+# directive prologue, while the literal `"use strict";` still occurs deep inside
+# a vendored template literal (`E(`"use strict"; return (`+e+`).constructor;`)`)
+# - so a `find`-based anchor reported success while splicing the whole IIFE into
+# the middle of a string. We prepend at offset 0 instead: index.js is a CJS
+# module with no prologue and is `require`d by index.pre.js (package.json main),
+# so offset 0 is both statement-level and earlier than every chunk.
+#
+# Break risk: LOW - A has no pattern left to break; B anchors on a log string
+# that has been stable across releases. If upstream splits the setter or renames
+# the log line, B fails loud.
 
 import std/[os, strformat, strutils]
 import std/nre
@@ -41,26 +50,28 @@ proc apply*(input: string): string =
     echo "  [OK] growthbook overrides helper already present"
     inc patchesApplied
   else:
-    const anchor = "\"use strict\";"
-    let idx = result.find(anchor)
-    if idx < 0:
-      echo "  [FAIL] \"use strict\"; anchor not found"
-    else:
-      result =
-        result[0 ..< idx + anchor.len] & OVERRIDES_JS & result[idx + anchor.len .. ^1]
-      echo "  [OK] growthbook overrides helper injected after \"use strict\""
+    # Prepend at offset 0 (see header note: no directive prologue since v1.26832.0).
+    result = OVERRIDES_JS & result
+    if result.contains("__CDB_GB_OVERRIDES__"):
+      echo "  [OK] growthbook overrides helper prepended to index.js"
       inc patchesApplied
+    else:
+      echo "  [FAIL] growthbook overrides helper missing after injection"
 
   # --- Sub-patch B: hook the features-store setter --------------------------
   # v1.19367.0 shape:
   #   function hTt(e){const t=lf;lf=e,AP=!0;const r=Object.keys(lf).length,
   #     n=Object.entries(lf).filter(...);v.info("[growthbook] loaded %d features (%d changed)",...)
+  # v1.26832.0 shape (new minifier: `let` instead of `const`, backtick literals,
+  # separate `let` for the second binding, dotted logger callee):
+  #   function tS(e){let t=Mx;Mx=e,Nx=!0;let n=Object.keys(Mx).length,
+  #     i=Object.entries(Mx).filter(...).length;r.o.info(`[growthbook] loaded %d features (%d changed)`,n,i)
   if result.contains("=(globalThis.__cdbApplyGbOverrides||"):
     echo "  [OK] features-store setter already hooked"
     inc patchesApplied
   else:
     let setterPat = nre.re(
-      r"""(function [\w$]+\(([\w$]+)\)\{)(const [\w$]+=[\w$]+;[\w$]+=\2,[\w$]+=!0;const [\w$]+=Object\.keys\([\w$]+\)\.length[^"]{0,200}"\[growthbook\] loaded %d features \(%d changed\)")"""
+      r"""(function [\w$]+\(([\w$]+)\)\{)((?:const|let|var) [\w$]+=[\w$]+;[\w$]+=\2,[\w$]+=!0;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,200}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
     )
     var hooked = 0
     let m = result.find(setterPat)

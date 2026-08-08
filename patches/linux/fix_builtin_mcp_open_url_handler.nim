@@ -40,10 +40,14 @@ proc apply*(input: string): string =
 
   # Step 1: inject the branch at the head of the child-message if-chain.
   # Matches (v1.20186.1): };return(d,f)=>{const p=d;if((p==null?void 0:p.type)==="msal-cache-get"
-  # Groups: 0=head incl. "const p=d;", 1=message param, 2=message var,
+  # Matches (v1.26832.0): };return(a,c)=>{let u=a;if(u?.type===`msal-cache-get`
+  # The v1.26832.0 minifier switched to `let`, native optional chaining instead
+  # of the (x==null?void 0:x.y) desugaring, and backtick template literals - all
+  # three are accepted below so the patch spans both bundle shapes.
+  # Groups: 0=head incl. "let p=d;", 1=message param, 2=message var,
   # 3=original if-head.
   let pattern =
-    re2"""(\};return\(([\w$]+),[\w$]+\)=>\{const ([\w$]+)=[\w$]+;)(if\(\([\w$]+==null\?void 0:[\w$]+\.type\)==="msal-cache-get")"""
+    re2"""(\};return\(([\w$]+),[\w$]+\)=>\{(?:const|let|var) ([\w$]+)=[\w$]+;)(if\((?:\([\w$]+==null\?void 0:[\w$]+\.type\)|[\w$]+\?\.type)===["`]msal-cache-get["`])"""
 
   # Locate the injection site so we can scope the electron-var scan to its chunk.
   var injMatches: seq[RegexMatch2] = @[]
@@ -68,7 +72,7 @@ proc apply*(input: string): string =
   let chunk = input[chunkStart ..< chunkEnd]
 
   var electronVars = initHashSet[string]()
-  for m in chunk.findAll(re2"([\w$]+)\.safeStorage\.decryptString\("):
+  for m in chunk.findAll(re2"((?:[\w$]+\.)*[\w$]+)\.safeStorage\.decryptString\("):
     electronVars.incl(chunk[m.group(0)])
   if electronVars.len != 1:
     echo "  [FAIL] built-in MCP open-url handler: expected exactly 1 distinct " &

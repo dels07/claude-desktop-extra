@@ -13,37 +13,48 @@
 # typically completes in 30-50ms, so 100ms still provides comfortable headroom
 # while saving 100ms on every Quick Entry open.
 
-import std/[os, options]
+import std/[os, strutils, options]
 import std/nre
 
+# Name of the injected timeout resolver. Doubles as the idempotency marker:
+# a generic `_r` would collide with minified locals, this cannot.
+const TIMEOUT_MARKER = "_qeReadyRace"
+
 proc apply*(input: string): string =
-  # The Quick Entry show function waits for ready-to-show:
-  #   <VAR>||await(<VAR2>==null?void 0:<VAR2>.catch(<P>=>{<LOG>.error("Quick Entry: Error waiting for ready %o",{error:<P>})}))
+  # The Quick Entry show function waits for ready-to-show. Up to v1.24012.x the
+  # minifier expanded optional chaining by hand:
+  #   <FLAG>||await(<P>==null?void 0:<P>.catch(<E>=>{<LOG>.error("Quick Entry: Error waiting for ready %o",{error:<E>})}))
+  # v1.26832.0 emits the `?.` operator directly and uses backtick template
+  # literals:
+  #   <FLAG>||await <P>?.catch(<E>=>{<LOG>.error(`Quick Entry: Error waiting for ready %o`,{error:<E>}))
   # Variable names change every release (NEe/YEe, nK/AK, etc.) and so does the
-  # logger module (`S` in v1.13576). We must REUSE the upstream logger and catch
-  # param in the replacement -- hardcoding them (e.g. `R.error`) plants a latent
-  # ReferenceError in the rejection branch even though the patch applies cleanly
-  # and node --check passes. Capture both and emit them verbatim.
+  # logger module (`n.o` in v1.26832.0 -- a dotted chunk namespace now). We must
+  # REUSE the upstream logger and catch param in the replacement -- hardcoding
+  # them (e.g. `R.error`) plants a latent ReferenceError in the rejection branch
+  # even though the patch applies cleanly and node --check passes. The whole
+  # catch callback is captured and re-emitted verbatim, which keeps the logger,
+  # the catch param and the upstream quoting style intact.
   # We wrap this in Promise.race with a 100ms timeout.
+  if strutils.contains(input, TIMEOUT_MARKER):
+    echo "  [OK] ready-to-show timeout already present (idempotent)"
+    return input
+
   let pat =
-    re"""([\w$]+)\|\|await\(([\w$]+)==null\?void 0:\2\.catch\(([\w$]+)=>\{([\w$]+)\.error\("Quick Entry: Error waiting for ready %o",\{error:\3\}\)\}\)\)"""
+    re"""([\w$]+)\|\|await ([\w$]+)\?\.catch\((([\w$]+)=>\{[\w$]+(?:\.[\w$]+)*\.error\([`"]Quick Entry: Error waiting for ready %o[`"],\{error:\4\}\)\})\)"""
 
   let m = input.find(pat)
   if m.isSome:
     let match = m.get
     let flagVar = match.captures[0]
     let promiseVar = match.captures[1]
-    let catchParam = match.captures[2]
-    let logVar = match.captures[3]
+    let catchCb = match.captures[2]
     let newStr =
-      flagVar & "||await Promise.race([" & promiseVar & "==null?void 0:" & promiseVar &
-      ".catch(" & catchParam & "=>{" & logVar &
-      ".error(\"Quick Entry: Error waiting for ready %o\",{error:" & catchParam &
-      "})}),new Promise(_r=>setTimeout(_r,100))])"
+      flagVar & "||await Promise.race([" & promiseVar & "?.catch(" & catchCb &
+      "),new Promise(" & TIMEOUT_MARKER & "=>setTimeout(" & TIMEOUT_MARKER & ",100))])"
     result =
       input[0 ..< match.matchBounds.a] & newStr & input[match.matchBounds.b + 1 .. ^1]
     echo "  [OK] ready-to-show timeout (100ms) added (vars: " & flagVar & ", " &
-      promiseVar & ", logger: " & logVar & ")"
+      promiseVar & ")"
   else:
     echo "  [FAIL] ready-to-show wait pattern not found"
     quit(1)

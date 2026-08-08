@@ -54,12 +54,16 @@ proc apply*(input: string): string =
   var m1: RegexMatch2
   let readDelegates =
     input.find(re2"""isStartupOnLoginEnabled\(\)\{return [\w$]+\(\)\}""", m1)
+  # v1.26832.0: node builtins are reached through namespace aliases
+  # (I.default.join / dt.default.homedir) and string literals became
+  # backticks, so allow member chains and either quoting.
   let autostartDir = input.find(
-    re2"""XDG_CONFIG_HOME\|\|[\w$]+\.join\([\w$]+\.homedir\(\),"\.config"\);return [\w$]+\.join\([\w$]+,"autostart"\)""",
+    re2"""XDG_CONFIG_HOME\|\|[\w$]+(?:\.[\w$]+)*\.join\([\w$]+(?:\.[\w$]+)*\.homedir\(\),["`]\.config["`]\);return [\w$]+(?:\.[\w$]+)*\.join\([\w$]+,["`]autostart["`]\)""",
     m1,
   )
   let autostartFile = input.find(
-    re2"""return`\$\{[\w$]+\.basename\(process\.execPath\)\}\.desktop`""", m1
+    re2"""return`\$\{[\w$]+(?:\.[\w$]+)*\.basename\(process\.execPath\)\}\.desktop`""",
+    m1,
   )
   if readDelegates and autostartDir and autostartFile:
     echo "  [OK] isStartupOnLoginEnabled reads XDG autostart natively " &
@@ -76,7 +80,7 @@ proc apply*(input: string): string =
   # error log is the second positive anchor.
   var m2: RegexMatch2
   let desktopBuilder = input.find(
-    re2"""\[Desktop Entry\]","Type=Application",`Name=\$\{[\w$]+\.app\.getName\(\)\}`,`Exec=\$\{[\w$]+\(process\.execPath\)\} --startup`,"X-GNOME-Autostart-enabled=true"""",
+    re2"""\[Desktop Entry\]["`],["`]Type=Application["`],["`]Name=\$\{[\w$]+\.app\.getName\(\)\}["`],["`]Exec=\$\{[\w$]+\(process\.execPath\)\} --startup["`],["`]X-GNOME-Autostart-enabled=true["`]""",
     m2,
   )
   let writeErrLog = "Failed to update XDG autostart entry" in input
@@ -102,15 +106,22 @@ proc apply*(input: string): string =
     echo "  [INFO] GNOME session-restore detection: already patched (_b.mtimeMs present)"
     patchesApplied += 1
   else:
-    let pattern3 = re2"""([\w$]+)\.argv\.includes\("--startup"\)"""
+    # v1.26832.0: `--startup` is a template literal and process is reached via a
+    # namespace alias (L.default.argv), so accept either quoting and member chains.
+    let pattern3 = re2"""([\w$]+(?:\.[\w$]+)*)\.argv\.includes\(["`]--startup["`]\)"""
     var count3 = 0
     result = input.replace(
       pattern3,
       proc(m: RegexMatch2, s: string): string =
         inc count3
         let processVar = s[m.group(0)]
-        processVar &
-          ".argv.includes(\"--startup\")||process.platform===\"linux\"&&(()=>{try{const _uid=String(process.getuid());const _wd=process.env.WAYLAND_DISPLAY;const _sock=_wd?require(\"path\").join(\"/run/user\",_uid,_wd):require(\"path\").join(\"/run/user\",_uid,\"bus\");const _b=require(\"fs\").statSync(_sock);return(Date.now()-_b.mtimeMs)<60000}catch(e){return false}})()",
+        # The result MUST be parenthesized: upstream negates this expression
+        # (`showWindow ??= !<proc>.argv.includes("--startup")`) and `!` binds
+        # tighter than `||`. Without the parens the injected heuristic would
+        # read `(!includes)||restore` and *show* the window on session restore
+        # — the exact opposite of what this patch is for.
+        "(" & processVar &
+          ".argv.includes(\"--startup\")||process.platform===\"linux\"&&(()=>{try{const _uid=String(process.getuid());const _wd=process.env.WAYLAND_DISPLAY;const _sock=_wd?require(\"path\").join(\"/run/user\",_uid,_wd):require(\"path\").join(\"/run/user\",_uid,\"bus\");const _b=require(\"fs\").statSync(_sock);return(Date.now()-_b.mtimeMs)<60000}catch(e){return false}})())",
     )
     if count3 == 1:
       echo "  [OK] GNOME session-restore detection: augmented argv --startup gate (1 match)"

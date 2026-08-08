@@ -13,10 +13,21 @@
 # plus a profile/extension discovery loop `x_i()` that iterates xSA(). So Chrome +
 # Edge work natively on Linux now.
 #
-# What's left for us — 4 sub-patches:
-#   A  Native-host BINARY PATH: redirect to the Claude Code native host under
-#      ~/.claude (the bundled artifacts path is Anthropic-internal and absent in
-#      our repackage). Anchor refactored from `${X}.exe` to a bare const.
+# The native-host BINARY PATH is upstreamed too (removed as a sub-patch in
+# v1.26832.0). The .deb ships a real Linux native messaging host at
+# resources/chrome-native-host (1.1 MB Rust ELF, glibc floor 2.34), and the
+# bundle's packaged branch resolves exactly there:
+#     ue=`chrome-native-host`
+#     function Tt(){let e=he.S;return R.app.isPackaged
+#         ?I.default.join(process.resourcesPath,e)
+#         :I.default.join(R.app.getAppPath(),`../../packages/desktop/chrome-native-host/artifacts`,e)}
+# Since the verbatim-layout refactor we ship the .deb's resources/ tree
+# unchanged and process.resourcesPath behaves as on the stock .deb, so
+# upstream's own resolution finds that binary in our repackage. We used to
+# redirect it to ~/.claude/chrome/chrome-native-host (the Claude Code CLI's
+# host); that only pointed the manifest away from the binary upstream ships.
+#
+# What's left for us — 3 sub-patches:
 #   BC EXTEND the native browser list: xSA() ships ONLY Chrome+Edge. We add
 #      Chromium, Brave, Vivaldi and Opera. Because BOTH the NativeMessagingHosts
 #      install loop (via Y_i→xSA) AND profile discovery (x_i→xSA) derive from
@@ -30,7 +41,7 @@
 import std/[os, strformat, strutils]
 import regex
 
-const EXPECTED_PATCHES = 4
+const EXPECTED_PATCHES = 3
 
 proc replaceFirst(
     content: var string, pattern: Regex2, subFn: proc(m: RegexMatch2, s: string): string
@@ -56,56 +67,25 @@ proc apply*(input: string): string =
   result = input
   var patchesApplied = 0
 
-  # ── Patch A: native-host binary path ──────────────────────────────────────
-  # New shape: function wbt(){const A=Qbt;return aA.app.isPackaged?
-  #   j.join(process.resourcesPath,A):j.join(aA.app.getAppPath(),
-  #   "../../packages/desktop/chrome-native-host/artifacts",A)}
-  # Inject a Linux short-circuit returning the Claude Code native host under
-  # ~/.claude. Anchor on the function head up to "isPackaged?".
-  let alreadyA =
-    re2"""if\(process\.platform==="linux"\)return require\("path"\)\.join\(require\("os"\)\.homedir\(\),"\.claude","chrome","chrome-native-host"\)"""
-  var amA: RegexMatch2
-  if result.find(alreadyA, amA):
-    echo "  [OK] Binary path resolution: already patched (skipped)"
-    patchesApplied += 1
-  else:
-    # function NAME(){const VAR=VAR2;return ELECTRON.app.isPackaged?
-    # (VAR2 is now a bare const, no `${...}.exe` template). Require the
-    # chrome-native-host artifacts path on the false branch to avoid matching an
-    # unrelated isPackaged fn.
-    let patternA =
-      re2"""(function [\w$]+\(\)\{)(const [\w$]+=[\w$]+;return [\w$]+\.app\.isPackaged\?[\w$]+\.join\(process\.resourcesPath,[\w$]+\):[\w$]+\.join\([\w$]+\.app\.getAppPath\(\),"\.\./\.\./packages/desktop/chrome-native-host/artifacts",)"""
-    let linuxBinary =
-      "if(process.platform===\"linux\")return require(\"path\").join(require(\"os\").homedir(),\".claude\",\"chrome\",\"chrome-native-host\");"
-    var countA = result.replaceFirst(
-      patternA,
-      proc(m: RegexMatch2, s: string): string =
-        s[m.group(0)] & linuxBinary & s[m.group(1)],
-    )
-    if countA >= 1:
-      echo &"  [OK] Binary path resolution: redirected to Claude Code native host ({countA} match)"
-      patchesApplied += 1
-    else:
-      echo "  [FAIL] Binary path resolution: pattern not found (wbt() shape changed?)"
-      echo "         Debug: rg -o 'chrome-native-host/artifacts' index.js"
-
   # ── Patch BC: extend native browser list (xSA) to 6 browsers ──────────────
   # Native xSA() returns ONLY Chrome+Edge. Replace its return array with one that
   # also includes Chromium/Brave/Vivaldi/Opera, reusing the upstream config-dir
   # var (the result of O_i(), bound to `const <A>=`). Both the NativeMessagingHosts
   # install loop (Y_i→xSA) and profile discovery (x_i→xSA) then cover all 6.
-  let alreadyBC = re2"""\{name:"Chromium",path:[\w$]+\.join\([\w$]+,"chromium"\)\}"""
+  let alreadyBC =
+    re2"""\{name:"Chromium",path:[\w$]+(?:\.[\w$]+)*\.join\([\w$]+,"chromium"\)\}"""
   var amBC: RegexMatch2
   if result.find(alreadyBC, amBC):
     echo "  [OK] Browser list (xSA): already extended to Chromium/Brave/Vivaldi/Opera (skipped)"
     patchesApplied += 1
   else:
-    # function xSA(){<os>.homedir();{const <CFG>=O_i();return[{name:"Chrome",...},{name:"Edge",...}]}}
-    # Capture g0 = head through `const <CFG>=<dirfn>();return[`, g1 = the config-dir
+    # function Ft(){<os>.homedir();{let <CFG>=Nt();return[{name:`Chrome`,...},{name:`Edge`,...}]}return[]}
+    # Capture g0 = head through `let <CFG>=<dirfn>();return[`, g1 = the config-dir
     # var name, then we rebuild the full 6-entry array and keep the original
-    # Chrome+Edge entries.
+    # Chrome+Edge entries. Quoting is backticks since v1.26832.0 and the module
+    # accessors are dotted (`q.default.homedir()`, `W.default.join`).
     let patternBC =
-      re2"""(function [\w$]+\(\)\{[\w$]+\.homedir\(\);\{const )([\w$]+)(=[\w$]+\(\);return\[)(\{name:"Chrome",path:([\w$]+)\.join\([\w$]+,"google-chrome"\)\},\{name:"Edge",path:[\w$]+\.join\([\w$]+,"microsoft-edge"\)\})(\])"""
+      re2"""(function [\w$]+\(\)\{[\w$]+(?:\.[\w$]+)*\.homedir\(\);\{(?:const|let|var) )([\w$]+)(=[\w$]+(?:\.[\w$]+)*\(\);return\[)(\{name:["`]Chrome["`],path:([\w$]+(?:\.[\w$]+)*)\.join\([\w$]+,["`]google-chrome["`]\)\},\{name:["`]Edge["`],path:[\w$]+(?:\.[\w$]+)*\.join\([\w$]+,["`]microsoft-edge["`]\)\})(\])"""
     var countBC = result.replaceFirst(
       patternBC,
       proc(m: RegexMatch2, s: string): string =
@@ -137,8 +117,10 @@ proc apply*(input: string): string =
     echo "  [OK] Chrome extension install: already patched (skipped)"
     patchesApplied += 1
   else:
+    # The status enum is reached through a dotted namespace since v1.26832.0
+    # (`D.i.Error`), so capture the whole prefix before `.Error`.
     let patternD =
-      re2"""(if\(process\.platform!=="darwin"\)return\{status:)([\w$]+)(\.Error,error:`Unsupported platform: \$\{process\.platform\}\. Only macOS is supported\.`\})"""
+      re2"""(if\(process\.platform!==["`]darwin["`]\)return\{status:)((?:[\w$]+\.)*[\w$]+)(\.Error,error:["`]Unsupported platform: \$\{process\.platform\}\. Only macOS is supported\.["`]\})"""
     var countD = result.replaceFirst(
       patternD,
       proc(m: RegexMatch2, s: string): string =
@@ -170,14 +152,14 @@ proc apply*(input: string): string =
 
   # ── Patch E: Chrome DevTools opener (still darwin/win32 only) ──────────────
   let alreadyE =
-    re2"""process\.platform==="linux"&&await [\w$]+\("xdg-open",\["chrome://inspect"\]\)"""
+    re2"""process\.platform==="linux"&&await [\w$]+(?:\.[\w$]+)*\("xdg-open",\["chrome://inspect"\]\)"""
   var amE: RegexMatch2
   if result.find(alreadyE, amE):
     echo "  [OK] Chrome DevTools opener: already patched (skipped)"
     patchesApplied += 1
   else:
     let patternE =
-      re2"""(process\.platform==="win32"&&await )([\w$]+)(\("start",\["chrome","chrome://inspect"\]\))"""
+      re2"""(process\.platform===["`]win32["`]&&await )((?:[\w$]+\.)*[\w$]+)(\(["`]start["`],\[["`]chrome["`],["`]chrome://inspect["`]\]\))"""
     var countE = result.replaceFirst(
       patternE,
       proc(m: RegexMatch2, s: string): string =

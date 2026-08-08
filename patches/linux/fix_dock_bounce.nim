@@ -191,8 +191,10 @@ proc apply*(input: string): string =
     applied.add("rua-guard(skip)")
     patchesApplied += 1
   else:
+    # v1.26832.0 dropped the hoisted `var <tmp>;` that older minifiers emitted
+    # in front of the guard expression, so the prefix is optional now.
     let ruaPattern =
-      re2"(requestUserAttention\(\)\{)(var [\w$]+;this\.isAppFocusedAndVisible\(\)\|\|)"
+      re2"(requestUserAttention\(\)\{)((?:var [\w$]+;)?this\.isAppFocusedAndVisible\(\)\|\|)"
     var ruaCount = 0
     result = result.replace(
       ruaPattern,

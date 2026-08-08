@@ -57,19 +57,25 @@ const EXTRA_VARS =
   "\"KDE_FULL_SESSION\",\"KDE_SESSION_VERSION\",\"GNOME_DESKTOP_SESSION_ID\""
 
 proc apply*(input: string): string =
-  # Idempotency: positive end-state check -- the widened allowlist INCLUDING
-  # KDE_SESSION_VERSION must be present (an older widened list without it must
-  # NOT count as patched, or KDE stays broken).
-  if "\"USER\",\"DISPLAY\",\"WAYLAND_DISPLAY\"" in input and
+  # Idempotency: positive end-state check -- OUR injected tail must be present.
+  # We key off the head of EXTRA_VARS (always double-quoted, because we emit it)
+  # rather than off upstream's trailing "USER" entry, whose quoting is
+  # minifier-dependent (v1.26832.0 emits `USER` as a backtick template literal).
+  # KDE_SESSION_VERSION is checked separately so an older widened list without it
+  # does NOT count as patched, or KDE stays broken.
+  if "\"DISPLAY\",\"WAYLAND_DISPLAY\",\"XAUTHORITY\"" in input and
       "\"KDE_SESSION_VERSION\"" in input:
     echo "  [OK] built-in MCP browser env: already patched"
     return input
 
   # Match the Linux branch of the env allowlist array. The env-var names are
-  # NOT minified, so this literal is stable across versions. Capture group 0 is
-  # the array body up to (but not including) the closing bracket, so we can
-  # append the extra vars before re-adding "]".
-  let pattern = re2"(\[""HOME"",""LOGNAME"",""PATH"",""SHELL"",""TERM"",""USER"")\]"
+  # NOT minified, so this literal is stable across versions -- only the quoting
+  # style moves (double quotes <= v1.24012.9, backticks in v1.26832.0), hence the
+  # quote-agnostic ["`] classes. Capture group 0 is the array body up to (but not
+  # including) the closing bracket, so we can append the extra vars before
+  # re-adding "]".
+  let pattern =
+    re2"(\[[""`]HOME[""`],[""`]LOGNAME[""`],[""`]PATH[""`],[""`]SHELL[""`],[""`]TERM[""`],[""`]USER[""`])\]"
   var count = 0
   result = input.replace(
     pattern,
@@ -80,7 +86,7 @@ proc apply*(input: string): string =
   )
 
   if count == 0:
-    if "\"HOME\",\"LOGNAME\",\"PATH\",\"SHELL\",\"TERM\",\"USER\"" in input:
+    if "\"HOME\",\"LOGNAME\"" in input or "`HOME`,`LOGNAME`" in input:
       echo "  [INFO] Found env allowlist but pattern didn't match (structure changed?)"
     echo "  [FAIL] built-in MCP browser env: 0 matches (may need pattern update)"
     quit(1)

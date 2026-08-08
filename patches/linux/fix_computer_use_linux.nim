@@ -150,7 +150,10 @@ proc apply*(input: string): string =
   block:
     let regularJs = LINUX_EXECUTOR_JS.strip()
     let kwinJs = buildKwinLinuxExecutorInjection().strip()
-    let pat = re"""(app\.on\("ready",async\(\)=>\{)"""
+    # v1.26832.0 switched minifier: most string literals became backtick
+    # template literals (app.on(`ready`)). Accept either quote style here and
+    # everywhere else a literal is part of an anchor.
+    let pat = re"""(app\.on\(["`]ready["`],async\(\)=>\{)"""
     let n = replaceFirst(
       content,
       pat,
@@ -164,32 +167,42 @@ proc apply*(input: string): string =
       inc patchesApplied
     else:
       echo "  [FAIL] app.on(\"ready\") pattern: 0 matches"
-      return original
+      raise newException(ValueError, "  [FAIL] app.on(\"ready\") pattern: 0 matches")
 
   # ── Patch 2: add "linux" to the platform Set ───────────────────────────
   block:
-    let needle = """new Set(["darwin","win32"])"""
-    let repl = """new Set(["darwin","win32","linux"])"""
-    let n = replaceLiteralFirst(content, needle, repl)
+    # Quote-agnostic: v1.26832.0 emits new Set([`darwin`,`win32`]). Re-emit the
+    # quote character upstream actually used so the output stays homogeneous.
+    let pat = re"""new Set\((\[(["`])darwin\2,(["`])win32\3)\]\)"""
+    let n = replaceFirst(
+      content,
+      pat,
+      proc(m: RegexMatch): string =
+        let quote = m.captures[1]
+        "new Set(" & m.captures[0] & "," & quote & "linux" & quote & "])",
+    )
     if n >= 1:
       echo &"  [OK] ese Set: added linux ({n} match)"
       inc changes, n
       inc patchesApplied
     else:
       echo "  [FAIL] ese Set pattern: 0 matches"
-      return original
+      raise newException(ValueError, "  [FAIL] ese Set pattern: 0 matches")
 
   # ── Patch 4: createDarwinExecutor Linux fallback ───────────────────────
   block:
+    # v1.26832.0: `throw new Error(` became `throw Error(`, and "darwin" is a
+    # backtick literal. Capture the whole throw-guard verbatim and re-emit it so
+    # neither variation has to be reproduced by hand.
     let pat =
-      re"""(function [\w$]+\([\w$]+\)\{)if\(process\.platform!=="darwin"\)throw new Error"""
+      re"""(function [\w$]+\([\w$]+\)\{)(if\(process\.platform!==["`]darwin["`]\)throw (?:new )?Error)"""
     let n = replaceFirst(
       content,
       pat,
       proc(m: RegexMatch): string =
         m.captures[0] &
           "if(process.platform===\"linux\"&&globalThis.__linuxExecutor)return globalThis.__linuxExecutor;" &
-          "if(process.platform!==\"darwin\")throw new Error",
+          m.captures[1],
     )
     if n >= 1:
       echo &"  [OK] createDarwinExecutor: Linux fallback ({n} match)"
@@ -197,7 +210,7 @@ proc apply*(input: string): string =
       inc patchesApplied
     else:
       echo "  [FAIL] createDarwinExecutor pattern: 0 matches"
-      return original
+      raise newException(ValueError, "  [FAIL] createDarwinExecutor pattern: 0 matches")
 
   # ── Patch 4d: platform executor factory (Cowork/agent path) ────────────
   # As of v1.15200 upstream split the executor factory in two. Patch 4 above
@@ -212,8 +225,19 @@ proc apply*(input: string): string =
     # (immediately before the "executor not implemented" throw) — NOT merely that
     # the branch string exists somewhere, since Patch 4 injects an identical
     # string into createDarwinExecutor.
+    # v1.26832.0: the win32/darwin arms became namespace-object method calls
+    # (`s.r(),s.t(t)` / `o.t(t)`), platform literals are backticks, and the throw
+    # dropped `new`. Allow dotted callees and either quote style.
+    #
+    # The guard describes the branch order this patch actually produces: the
+    # linux branch goes BETWEEN the darwin arm and the throw. (Before v1.26832.0
+    # it claimed the opposite order and so never matched its own output — a dead
+    # branch that only ever produced a spurious [FAIL] on a second run, never a
+    # false [OK].) Pinning it to the darwin-arm + throw pair is what keeps it
+    # from being satisfied by Patch 4's identical injection in
+    # createDarwinExecutor, which is preceded by a function header instead.
     let alreadyPat =
-      re"""platform==="linux"&&globalThis\.__linuxExecutor\)return globalThis\.__linuxExecutor;if\(process\.platform==="win32"\)return [\w$]+\(\),[\w$]+\([\w$]+\);if\(process\.platform==="darwin"\)return [\w$]+\([\w$]+\);throw new Error\(`computer-use executor not implemented"""
+      re"""if\(process\.platform===["`]darwin["`]\)return [\w$]+(?:\.[\w$]+)*\([\w$]+\);if\(process\.platform==="linux"&&globalThis\.__linuxExecutor\)return globalThis\.__linuxExecutor;throw (?:new )?Error\(["`]computer-use executor not implemented"""
     if content.contains(alreadyPat):
       echo "  [OK] platform executor factory: linux branch already present at throw-site"
       inc patchesApplied
@@ -226,7 +250,7 @@ proc apply*(input: string): string =
       # contains a `.`, so it is `[\w$.]+` (NOT `[\w$]+`, which stops at the dot
       # and never reaches the closing `}` — a silent 0-match trap).
       let pat =
-        re"""(if\(process\.platform==="darwin"\)return [\w$]+\([\w$]+\);)(throw new Error\(`computer-use executor not implemented for \$\{[\w$.]+\}`\))"""
+        re"""(if\(process\.platform===["`]darwin["`]\)return [\w$]+(?:\.[\w$]+)*\([\w$]+\);)(throw (?:new )?Error\(`computer-use executor not implemented for \$\{[\w$.]+\}`\))"""
       let n = replaceFirst(
         content,
         pat,
@@ -241,10 +265,16 @@ proc apply*(input: string): string =
         inc patchesApplied
       elif n > 1:
         echo &"  [FAIL] platform executor factory: {n} matches (expected 1) — anchor too broad"
-        return original
+        raise newException(
+          ValueError,
+          &"  [FAIL] platform executor factory: {n} matches (expected 1) — anchor too broad",
+        )
       else:
         echo "  [FAIL] platform executor factory: 0 matches (issue #159 throw-site anchor) — re-audit"
-        return original
+        raise newException(
+          ValueError,
+          "  [FAIL] platform executor factory: 0 matches (issue #159 throw-site anchor) — re-audit",
+        )
 
   # ── Patch 4b (kwin-wayland): cu lock acquire → __setLockHeld(true) ──────
   # v1.20186.1 refactored the lock class: `this.holder` became
@@ -254,17 +284,18 @@ proc apply*(input: string): string =
   # The cuLockChanged emit is unchanged; anchor the acquire-side emit and inject
   # __setLockHeld(true) right before it.
   block:
+    # v1.26832.0: the trailing callback became a method call (`e.nn()`) and the
+    # event name a backtick literal. Capture the whole emit-and-callback tail and
+    # re-emit it verbatim instead of reconstructing it.
     let pat =
-      re"""return this\.exclusiveHolder=([\w$]+),this\.emit\("cuLockChanged",\{holder:\1\}\),([\w$]+)\(\),!0"""
+      re"""(return this\.exclusiveHolder=([\w$]+),)(this\.emit\(["`]cuLockChanged["`],\{holder:\2\}\),[\w$]+(?:\.[\w$]+)*\(\),!0)"""
     let n = replaceFirst(
       content,
       pat,
       proc(m: RegexMatch): string =
-        let holder = m.captures[0]
-        let callback = m.captures[1]
-        "return this.exclusiveHolder=" & holder &
-          ",process.platform===\"linux\"&&globalThis.__linuxExecutor?.__setLockHeld?.(!0).catch?.(e=>(globalThis.__cdbDiag||console.warn)(\"[linux-executor] failed to start bridge session on lock acquire\",e))," &
-          "this.emit(\"cuLockChanged\",{holder:" & holder & "})," & callback & "(),!0",
+        m.captures[0] &
+          "process.platform===\"linux\"&&globalThis.__linuxExecutor?.__setLockHeld?.(!0).catch?.(e=>(globalThis.__cdbDiag||console.warn)(\"[linux-executor] failed to start bridge session on lock acquire\",e))," &
+          m.captures[2],
     )
     if n >= 1:
       echo &"  [OK] cu lock acquire: start bridge session on Linux ({n} match)"
@@ -274,19 +305,23 @@ proc apply*(input: string): string =
       echo "  [FAIL] cu lock acquire pattern: 0 matches"
 
   # ── Patch 4b.2: cu lock release → __setLockHeld(false) ─────────────────
-  # v1.20186.1: `this.holder` → `this.exclusiveHolder` (see Patch 4b). The
-  # release-side emit is otherwise unchanged.
+  # v1.20186.1: `this.holder` → `this.exclusiveHolder` (see Patch 4b).
+  # v1.26832.0 split the release path in two — `releaseExclusive(x)` (display
+  # lock only) and `release(x)` (also drops the app lock) — each with its own
+  # copy of the clear-and-emit expression. BOTH are genuine "the exclusive CU
+  # lock was dropped" sites, so hook every occurrence rather than only the first;
+  # __setLockHeld(!1) is idempotent, so a session released through both paths is
+  # still correct.
   block:
     let pat =
-      re"""this\.exclusiveHolder===([\w$]+)&&\(this\.exclusiveHolder=void 0,this\.emit\("cuLockChanged",\{holder:void 0\}\)\)"""
-    let n = replaceFirst(
+      re"""(this\.exclusiveHolder===([\w$]+)&&\(this\.exclusiveHolder=void 0,)(this\.emit\(["`]cuLockChanged["`],\{holder:void 0\}\)\))"""
+    let n = replaceAllRegex(
       content,
       pat,
       proc(m: RegexMatch): string =
-        let holder = m.captures[0]
-        "this.exclusiveHolder===" & holder &
-          "&&(this.exclusiveHolder=void 0,process.platform===\"linux\"&&globalThis.__linuxExecutor?.__setLockHeld?.(!1).catch?.(e=>(globalThis.__cdbDiag||console.warn)(\"[linux-executor] failed to stop bridge session on lock release\",e))," &
-          "this.emit(\"cuLockChanged\",{holder:void 0}))",
+        m.captures[0] &
+          "process.platform===\"linux\"&&globalThis.__linuxExecutor?.__setLockHeld?.(!1).catch?.(e=>(globalThis.__cdbDiag||console.warn)(\"[linux-executor] failed to stop bridge session on lock release\",e))," &
+          m.captures[2],
     )
     if n >= 1:
       echo &"  [OK] cu lock release: stop bridge session on Linux ({n} match)"
@@ -297,7 +332,7 @@ proc apply*(input: string): string =
 
   # ── Patch 5: ensureOsPermissions → skip TCC on Linux ───────────────────
   block:
-    let pat = re"""ensureOsPermissions:([\w$]+)"""
+    let pat = re"""ensureOsPermissions:([\w$]+(?:\.[\w$]+)*)"""
     let n = replaceFirst(
       content,
       pat,
@@ -329,11 +364,22 @@ proc apply*(input: string): string =
       # screenshot-dims decl (added an onTakeoverRequest/approveTakeover takeover
       # flow ending in `||X.call(Y)}}}const <dims>=...` instead of the old
       # `;X()}}const <dims>=...`). The old prologue anchor `;[\w$]+\(\)\}\}const`
-      # no longer matches. The screenshot-dims decl itself is unchanged and unique,
-      # so anchor the async header, then lazily skip (up to 8000 chars) straight to
-      # that decl — do not try to pin the exact prologue shape.
+      # no longer matches. The screenshot-dims decl itself is unique, so anchor
+      # the async header, then lazily skip (up to 8000 chars) straight to that
+      # decl — do not try to pin the exact prologue shape.
+      #
+      # v1.26832.0 rewrote the decl itself: the `X||(a=b.getLastScreenshotDims)==
+      # null?void 0:a.call(b)` babel-style optional call collapsed into a plain
+      # ternary over a native optional call — `let <dims>=<skip>?void 0:<ctx>.
+      # getLastScreenshotDims?.()`. `const` also became `let`.
+      #
+      # The header anchor is now pinned to `return async(...)` (the dispatcher
+      # factory's returned tool handler). Without `return ` the lazy skip also
+      # matches two nested `async(e,t)=>{` permission callbacks that sit ~7k
+      # chars upstream of the decl, which would capture THEIR `e` as the tool
+      # name — a silent mis-binding, not a build failure.
       let seedPat =
-        re"""async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?const ([\w$]+)=([\w$]+)\|\|\(([\w$]+)=([\w$]+)\.getLastScreenshotDims\)==null\?void 0:\4\.call\(\5\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(\)=>\6\.abort\(\),[\w$]+\))?,([\w$]+)=\{"""
+        re"""return async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?(?:const|let|var) ([\w$]+)=([\w$]+)\?void 0:[\w$]+(?:\.[\w$]+)*\.getLastScreenshotDims\?\.\(\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(\)=>\4\.abort\(\),[\w$]+\))?,([\w$]+)=\{"""
       let maybeSeed = content.find(seedPat)
       if maybeSeed.isNone:
         echo "  [FAIL] screenshot intro note: wrapper seed anchor not found"
@@ -346,16 +392,18 @@ proc apply*(input: string): string =
           ",linuxVisibleLastScreenshot=process.platform===\"linux\"&&" & lastVar &
           "===void 0&&" & toolName & "===\"screenshot\"?void 0:" & lastVar & "??(" &
           dimsVar & "?{..." & dimsVar & ",base64:\"\"}:void 0)"
-        # Python: split = seed_match.start(6) - 1 (index of comma before AbortController var)
-        # Group 6 in Python (1-indexed) is the AbortController var. In nre captures[5].
-        let abortBounds = seed.captureBounds[5]
+        # Split at the comma immediately before the AbortController var so the
+        # injection joins the same declaration list. That var is group 4 of the
+        # v1.26832.0 seed pattern → nre captures/captureBounds index 3.
+        let abortBounds = seed.captureBounds[3]
         let splitPoint = abortBounds.a - 1
         content = content[0 ..< splitPoint] & injection & content[splitPoint ..^ 1]
         inc changes
 
         let lastScreenshotPat = re(
           "lastScreenshot:" & escapeRe(lastVar) & r"\?\?\(" & escapeRe(dimsVar) &
-            r"\?\{\.\.\." & escapeRe(dimsVar) & """,base64:""\}:void 0\),"""
+            r"\?\{\.\.\." & escapeRe(dimsVar) &
+            r",base64:(?:\x22\x22|\x60\x60)\}:void 0\),"
         )
         let lsCount = replaceFirst(
           content,
@@ -379,12 +427,16 @@ proc apply*(input: string): string =
     # Accept all three (non-capturing): each ternary arm is `X()` or `X.Y()`. The
     # ternary shape is unique to the computer-use tool object (siblings use
     # `e.sessionType==="ccd"` without paired call arms).
+    # v1.26832.0 moved `serverName:<ns>.<k>,tools:[],` in front of isEnabled on
+    # this object and switched the literals to backticks. Allow a short
+    # brace-free property prefix rather than pinning those two keys, and accept
+    # either quote style around "ccd".
     let htcStart =
-      re"""(([\w$]+)=\{isEnabled:[\w$]+=>(?:[\w$]+\.sessionType==="ccd"\?[\w$]+(?:\.[\w$]+)?\(\):[\w$]+(?:\.[\w$]+)?\(\)|[\w$]+\(\)),handleToolCall:async\(([\w$]+),([\w$]+),([\w$]+)\)=>\{)"""
+      re"""(([\w$]+)=\{[^{}]{0,80}isEnabled:[\w$]+=>(?:[\w$]+\.sessionType===["`]ccd["`]\?[\w$]+(?:\.[\w$]+)?\(\):[\w$]+(?:\.[\w$]+)?\(\)|[\w$]+\(\)),handleToolCall:async\(([\w$]+),([\w$]+),([\w$]+)\)=>\{)"""
     let maybeHtc = content.find(htcStart)
     if maybeHtc.isNone:
       echo "  [FAIL] handleToolCall pattern: 0 matches"
-      return original
+      raise newException(ValueError, "  [FAIL] handleToolCall pattern: 0 matches")
     let htc = maybeHtc.get()
     let objName = htc.captures[1]
     let toolNameParam = htc.captures[2]
@@ -394,12 +446,13 @@ proc apply*(input: string): string =
 
     let afterBrace = content[injectPos ..< min(injectPos + 2000, content.len)]
     let dispatcherPat = re(
-      "const [\\w$]+=([\\w$]+)\\(" & escapeRe(sessionParam) & """\),\{save_to_disk:"""
+      "(?:const|let|var) [\\w$]+=([\\w$]+)\\(" & escapeRe(sessionParam) &
+        """\),\{save_to_disk:"""
     )
     let maybeDispatcher = afterBrace.find(dispatcherPat)
     if maybeDispatcher.isNone:
       echo "  [FAIL] handleToolCall dispatcher not found"
-      return original
+      raise newException(ValueError, "  [FAIL] handleToolCall dispatcher not found")
     let dispatcher = maybeDispatcher.get().captures[0]
     var handlerJs = LINUX_HANDLER_INJECTION_JS.strip()
     handlerJs = handlerJs.replace("__SELF__", objName)
@@ -434,7 +487,7 @@ proc apply*(input: string): string =
         echo "  [OK] teach overlay controller: CU gate found after TCC stub (handled by Set fix)"
         inc patchesApplied
       elif beforeStub.find(
-        re"[\w$]+\(\)\?[\w$]+\([\w$]+\):[\w$]+\.for\([\w$]+\)\.setImplementation\(\{"
+        re"[\w$]+(?:\.[\w$]+)*\(\)\?[\w$]+\([\w$]+\):[\w$]+(?:\.[\w$]+)*\.for\([\w$]+\)\.setImplementation\(\{"
       ).isSome:
         echo "  [OK] teach overlay controller: CU gate found before TCC stub via ternary (handled by Set fix)"
         inc patchesApplied
@@ -459,8 +512,8 @@ proc apply*(input: string): string =
           let headerPat = re"""^function [\w$]+\(([\w$]+),([\w$]+)\)\{$"""
           let headerMatch = fnInfo.header.find(headerPat)
           let bodyOK =
-            fnInfo.body.contains(".on(\"teachModeChanged\"") and
-            fnInfo.body.contains(".on(\"teachStepRequested\"")
+            fnInfo.body.contains(re"""\.on\(["`]teachModeChanged["`]""") and
+            fnInfo.body.contains(re"""\.on\(["`]teachStepRequested["`]""")
           if headerMatch.isNone or not bodyOK:
             echo "  [FAIL] teach overlay controller init function shape: unexpected"
           else:
@@ -492,7 +545,7 @@ proc apply*(input: string): string =
           let fnInfo = fnInfoOpt.get
           let headerPat = re"""^function [\w$]+\(([\w$]+)\)\{$"""
           let headerMatch = fnInfo.header.find(headerPat)
-          let bodyOK = fnInfo.body.contains(".on(\"cuLockChanged\"")
+          let bodyOK = fnInfo.body.contains(re"""\.on\(["`]cuLockChanged["`]""")
           if headerMatch.isNone or not bodyOK:
             echo "  [FAIL] cu side-panel controller init function shape: unexpected"
           else:
@@ -510,7 +563,7 @@ proc apply*(input: string): string =
   var overlayVar: string
   block:
     let overlayVarPat =
-      re"""([\w$]+)\.setAlwaysOnTop\(!0,"screen-saver"\),\1\.setFullScreenable\(!1\),\1\.setIgnoreMouseEvents\(!0,\{forward:!0\}\)"""
+      re"""([\w$]+)\.setAlwaysOnTop\(!0,["`]screen-saver["`]\),\1\.setFullScreenable\(!1\),\1\.setIgnoreMouseEvents\(!0,\{forward:!0\}\)"""
     let maybeOV = content.find(overlayVarPat)
     if maybeOV.isNone:
       echo "  [FAIL] teach overlay mouse: overlay variable pattern not found"
@@ -551,16 +604,27 @@ proc apply*(input: string): string =
         echo "  [FAIL] teach overlay: yJt pattern not found"
 
     # ── Patch 9b: neutralize setIgnoreMouseEvents in SUn ─────────────────
+    # v1.26832.0 replaced the raw IPC channel send in the "working" handler
+    # (`<ov>.webContents.send("cu-teach:working")`) with a typed dispatcher call
+    # (`<ns>.getDispatcher(<ov>.webContents)?.dispatchWorking()`); the channel
+    # string "cu-teach:working" no longer exists anywhere in the bundle. The
+    # dispatch call is what now discriminates this site from the overlay-creation
+    # site, which shares the identical setIgnoreMouseEvents prefix.
     block:
       let ov = overlayVarOpt.get
-      let sunPat =
-        ov & ".setIgnoreMouseEvents(!0,{forward:!0})," & ov &
-        ".webContents.send(\"cu-teach:working\""
-      let sunRepl =
-        "(process.platform!==\"linux\"&&" & ov &
-        ".setIgnoreMouseEvents(!0,{forward:!0}))," & ov &
-        ".webContents.send(\"cu-teach:working\""
-      if replaceLiteralFirst(content, sunPat, sunRepl) == 1:
+      let sunPat = re(
+        escapeRe(ov) & r"\.setIgnoreMouseEvents\(!0,\{forward:!0\}\)," &
+          r"([\w$]+(?:\.[\w$]+)*\.getDispatcher\(" & escapeRe(ov) &
+          r"\.webContents\)\?\.dispatchWorking\(\))"
+      )
+      let sunCount = replaceFirst(
+        content,
+        sunPat,
+        proc(m: RegexMatch): string =
+          "(process.platform!==\"linux\"&&" & ov &
+            ".setIgnoreMouseEvents(!0,{forward:!0}))," & m.captures[0],
+      )
+      if sunCount == 1:
         echo "  [OK] teach overlay: neutralized setIgnoreMouseEvents in working handler (SUn) for Linux"
         inc changes
         inc patchesApplied
@@ -569,15 +633,18 @@ proc apply*(input: string): string =
 
   # ── Patch 8a (kwin-wayland): disable glow overlay ──────────────────────
   block:
+    # v1.26832.0: the emitter is reached through a module namespace (`N.t.on(...)`)
+    # and the event name is a backtick literal. Capture the whole `.on(...)` head
+    # and re-emit it instead of rebuilding it from an identifier.
     let pat =
-      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)([\w$]+)\.on\("cuLockChanged","""
+      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)([\w$]+(?:\.[\w$]+)*\.on\(["`]cuLockChanged["`],)"""
     let n = replaceFirst(
       content,
       pat,
       proc(m: RegexMatch): string =
         m.captures[0] &
           "if(process.platform===\"linux\"&&globalThis.__cuKwinMode)return;" &
-          m.captures[3] & ".on(\"cuLockChanged\",",
+          m.captures[3],
     )
     if n >= 1:
       echo &"  [OK] cu glow overlay: disabled in kwin-wayland mode ({n} match)"
@@ -590,7 +657,7 @@ proc apply*(input: string): string =
   block:
     # Python walks ALL matches and picks the first whose 80-byte prefix contains "workArea".
     let pat =
-      re"""(=new [\w$]+\.BrowserWindow\(\{[^}]*?)transparent:!0([^}]*?)backgroundColor:"#00000000""""
+      re"""(=new [\w$]+\.BrowserWindow\(\{[^}]*?)transparent:!0([^}]*?)backgroundColor:(["`])#00000000\3"""
     var applied = false
     for m in content.findIter(pat):
       let matchStart = m.matchBounds.a
@@ -599,10 +666,11 @@ proc apply*(input: string): string =
       if before.contains("workArea"):
         let bounds = m.matchBounds
         let old = content[bounds.a .. bounds.b]
+        let quote = content[m.captureBounds[2]]
         var newS = old
         newS = newS.replace("transparent:!0", "transparent:!globalThis.__isVM")
         newS = newS.replace(
-          "backgroundColor:\"#00000000\"",
+          "backgroundColor:" & quote & "#00000000" & quote,
           "backgroundColor:globalThis.__isVM?\"#000000\":\"#00000000\"",
         )
         # Single literal replacement
@@ -661,12 +729,22 @@ proc apply*(input: string): string =
     # assert it and count success (idempotent), keying off the PATCHED end-state
     # (return!0 as the first statement of the gate function), not the absence of
     # the old shape.
+    #
+    # v1.26832.0 reverted the v1.18286 three-statement shape back to a single
+    # ternary and moved the platform Set behind a module namespace:
+    #   function g(){return o.t.has(process.platform)?h()&&a.n(`chicagoEnabled`):!1}
+    # (`g` is exported as isComputerUseEnabled). Its sibling
+    #   function _(){return o.t.has(process.platform)&&h()&&!a.n(`chicagoEnabled`)}
+    # is isComputerUseAvailableButOptedOut and has no `?`, so the ternary shape
+    # below picks out exactly one function.
     let alreadyWs =
-      re"""function [\w$]+\(\)\{if\(process\.platform==="linux"\)return!0;if\(![\w$]+\.has\(process\.platform\)\)return!1;const """
+      re"""function [\w$]+\(\)\{if\(process\.platform==="linux"\)return!0;return [\w$]+(?:\.[\w$]+)*\.has\(process\.platform\)\?[\w$]+\(\)&&[\w$]+(?:\.[\w$]+)*\(["`]chicagoEnabled["`]\):!1\}"""
     if content.contains(alreadyWs):
       echo "  [OK] isEnabled: linux unconditional return!0 already present (guard satisfied)"
       inc patchesApplied
     else:
+      let patV26832 =
+        re"""(function [\w$]+\(\)\{)return [\w$]+(?:\.[\w$]+)*\.has\(process\.platform\)\?[\w$]+\(\)&&[\w$]+(?:\.[\w$]+)*\(["`]chicagoEnabled["`]\):!1\}"""
       let patV18286 =
         re"""(function [\w$]+\(\)\{)if\(!([\w$]+)\.has\(process\.platform\)\)return!1;const ([\w$]+)=([\w$]+)\(\);return \3!==void 0\?\3:([\w$]+)\(\)&&([\w$]+)\("chicagoEnabled"\)\}"""
       # <=v1.17377 shapes, kept as fallbacks:
@@ -676,7 +754,7 @@ proc apply*(input: string): string =
         re"""(function [\w$]+\(\)\{)return [\w$]+\([\w$]+\)\?[\w$]+\.has\(process\.platform\)&&[\w$]+\(\):[\w$]+\(\)\}"""
       var n = replaceFirst(
         content,
-        patV18286,
+        patV26832,
         proc(m: RegexMatch): string =
           let bounds = m.matchBounds
           let whole = content[bounds.a .. bounds.b]
@@ -684,6 +762,17 @@ proc apply*(input: string): string =
           m.captures[0] & "if(process.platform===\"linux\")return!0;" &
             whole[headerLen ..^ 1],
       )
+      if n == 0:
+        n = replaceFirst(
+          content,
+          patV18286,
+          proc(m: RegexMatch): string =
+            let bounds = m.matchBounds
+            let whole = content[bounds.a .. bounds.b]
+            let headerLen = m.captures[0].len
+            m.captures[0] & "if(process.platform===\"linux\")return!0;" &
+              whole[headerLen ..^ 1],
+        )
       if n == 0:
         n = replaceFirst(
           content,
@@ -731,12 +820,20 @@ proc apply*(input: string): string =
     # Rule-6 regression guard: assert the desired end-state (a Linux branch at the
     # top of this gate that either delegates to a wS-style fn or returns !0) is
     # present, keying off the PATCHED shape, not the absence of the old one.
+    #
+    # v1.26832.0 collapsed it to a single ternary too:
+    #   function y(){return i.Zt(l)?o.t.has(process.platform)&&h():g()}
+    # (`y` is exported as isComputerUseRegisterable, `l` is the GrowthBook flag
+    # id, `g` is the Patch-11 gate). The else-arm names the gate to delegate to,
+    # so capture it rather than hardcoding `return!0`.
     let alreadyBue =
-      re"""function [\w$]+\(\)\{if\(process\.platform==="linux"\)return (?:[\w$]+\(\)|!0);if\(![\w$]+\(([\w$]+)\)\)return """
+      re"""function [\w$]+\(\)\{if\(process\.platform==="linux"\)return (?:[\w$]+\(\)|!0);return [\w$]+(?:\.[\w$]+)*\(([\w$]+)\)\?[\w$]+(?:\.[\w$]+)*\.has\(process\.platform\)"""
     if content.contains(alreadyBue):
       echo "  [OK] rj/bue: linux branch already present (guard satisfied)"
       inc patchesApplied
     else:
+      let patV26832 =
+        re"""(function [\w$]+\(\)\{)return [\w$]+(?:\.[\w$]+)*\(([\w$]+)\)\?[\w$]+(?:\.[\w$]+)*\.has\(process\.platform\)&&[\w$]+\(\):([\w$]+)\(\)\}"""
       let patBue =
         re"""(function [\w$]+\(\)\{)if\(!([\w$]+)\(([\w$]+)\)\)return ([\w$]+)\(\);const ([\w$]+)=([\w$]+)\(\);return \5!==void 0\?\5:([\w$]+)\.has\(process\.platform\)&&([\w$]+)\(\)\}"""
       # <=v1.17377 shape (standalone chicagoEnabled ternary), kept as fallback:
@@ -744,15 +841,27 @@ proc apply*(input: string): string =
         re"""(function [\w$]+\(\)\{)return [\w$]+\.has\(process\.platform\)\?[\w$]+\(\)&&([\w$]+)\("chicagoEnabled"\):!1\}"""
       var n = replaceFirst(
         content,
-        patBue,
+        patV26832,
         proc(m: RegexMatch): string =
           let bounds = m.matchBounds
           let whole = content[bounds.a .. bounds.b]
           let headerLen = m.captures[0].len
-          let wsName = m.captures[3]
+          let wsName = m.captures[2]
           m.captures[0] & "if(process.platform===\"linux\")return " & wsName & "();" &
             whole[headerLen ..^ 1],
       )
+      if n == 0:
+        n = replaceFirst(
+          content,
+          patBue,
+          proc(m: RegexMatch): string =
+            let bounds = m.matchBounds
+            let whole = content[bounds.a .. bounds.b]
+            let headerLen = m.captures[0].len
+            let wsName = m.captures[3]
+            m.captures[0] & "if(process.platform===\"linux\")return " & wsName & "();" &
+              whole[headerLen ..^ 1],
+        )
       if n == 0:
         n = replaceFirst(
           content,
@@ -778,7 +887,7 @@ proc apply*(input: string): string =
   # 13a: Lf allowlist gate → empty on Linux
   block:
     let pat =
-      re"""([\w$]+)="The frontmost application must be in the session allowlist at the time of this call, or this tool returns an error and does nothing\.""""
+      re"""([\w$]+)=["`]The frontmost application must be in the session allowlist at the time of this call, or this tool returns an error and does nothing\.["`]"""
     let n = replaceFirst(
       content,
       pat,
@@ -795,18 +904,20 @@ proc apply*(input: string): string =
 
   # 13b: request_access macOS prefix → 3-way ternary
   block:
-    let old13b = """'This computer is running macOS. The file manager is "Finder". '"""
+    # v1.26832.0: single-quoted literal → backtick template. Inside a template
+    # literal the embedded `"Finder"` / `"Dolphin"` quotes need no escaping.
+    let old13b = "`This computer is running macOS. The file manager is \"Finder\". `"
     let new13b =
       "(process.platform===\"linux\"?(globalThis.__cuKwinMode?" &
-      "'This computer is running Linux with KDE Plasma. The file manager is \\\"Dolphin\\\". '" &
-      ":" & "'This computer is running Linux. " &
+      "`This computer is running Linux with KDE Plasma. The file manager is \"Dolphin\". `" &
+      ":" & "`This computer is running Linux. " &
       "On Linux, ALL applications are automatically accessible at full " &
       "tier without explicit permission grants. You do NOT need to call " &
       "request_access before using other tools. If called, it returns " &
       "synthetic grant confirmations. The file manager depends on the " &
       "desktop environment (e.g. Nautilus on GNOME, Dolphin on KDE, " &
-      "Thunar on XFCE). ')" & ":" &
-      "'This computer is running macOS. The file manager is \"Finder\". ')"
+      "Thunar on XFCE). `)" & ":" &
+      "`This computer is running macOS. The file manager is \"Finder\". `)"
     if replaceLiteralFirst(content, old13b, new13b) == 1:
       echo "  [OK] 13b request_access: 3-way (kwin-wayland=KDE/Dolphin, regular=generic Linux, other=macOS)"
       inc descChanges
@@ -816,8 +927,10 @@ proc apply*(input: string): string =
 
   # 13b.kwin-alias: plasmashell alias in request_access
   block:
+    # v1.26832.0: `const`→`let`, `=="string"`→`==\`string\``, and the error
+    # strings are backtick templates.
     let pat =
-      re"""(const ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3=="string"\)\)return [\w$]+\('"apps" must be an array of strings\.',"bad_args"\);const )([\w$]+)=\2(,[\w$]+=\{\};)"""
+      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3==["`]string["`]\)\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var) )([\w$]+)=\2(,[\w$]+=\{\};)"""
     let n = replaceFirst(
       content,
       pat,
@@ -837,19 +950,25 @@ proc apply*(input: string): string =
       echo "  [FAIL] 13b.kwin-alias request_access alias: not found"
 
   # 13b.kwin-alias-teach: plasmashell alias in request_teach_access
+  #
+  # v1.26832.0 dropped the intermediate `const <mapped>=<apps>,{needDialog:...}`
+  # binding: the raw apps array is now passed straight into the resolver call
+  # (`let{needDialog:...}=await X(ctx,<apps>,...)`), and it is its only use. So
+  # map the ARGUMENT instead of introducing a binding — that also keeps working
+  # whichever declarator upstream picks, since nothing is reassigned.
   block:
     let pat =
-      re"""(const ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3=="string"\)\)return [\w$]+\('"apps" must be an array of strings\.',"bad_args"\);const )([\w$]+)=\2(,\{needDialog:)"""
+      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3==["`]string["`]\)\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var)\{needDialog:[\s\S]{0,400}?\}=await [\w$]+\([\w$]+,)\2(,)"""
     let n = replaceFirst(
       content,
       pat,
       proc(m: RegexMatch): string =
         let prefix = m.captures[0]
         let appsVar = m.captures[1]
-        let mappedVar = m.captures[3]
-        let suffix = m.captures[4]
-        prefix & mappedVar & "=globalThis.__cuKwinMode?" & appsVar &
-          ".map(v=>v===\"org.kde.plasmashell\"?\"plasmashell\":v):" & appsVar & suffix,
+        let suffix = m.captures[3]
+        prefix & "(globalThis.__cuKwinMode?" & appsVar &
+          ".map(v=>v===\"org.kde.plasmashell\"?\"plasmashell\":v):" & appsVar & ")" &
+          suffix,
     )
     if n >= 1:
       echo "  [OK] 13b.kwin-alias-teach request_teach_access: plasmashell alias (kwin-wayland mode)"
@@ -860,19 +979,23 @@ proc apply*(input: string): string =
 
   # 13b.kwin-shell-hint: desktop shell hint template
   block:
+    # v1.26832.0: the nested win32/Finder branch inside the template's ${...}
+    # switched to backtick literals. The whole matched region is one template
+    # literal passed as an argument, so it can be swapped for a parenthesised
+    # ternary — no outer template wrapper needed, and the branch texts stay
+    # single-level templates where `"` needs no escaping.
     let prefix =
       "`The desktop shell is frontmost. Double-click, right-click, and Enter on desktop items can launch applications outside the allowlist. To interact with the desktop, taskbar, Start menu, Search, or file manager, call request_access with exactly \"${"
     let suffix =
-      "===\"win32\"?\"File Explorer\":\"Finder\"}\" in the apps array \xe2\x80\x94 that single grant covers all of them. To interact with a different app, use open_application to bring it forward.`"
+      "===`win32`?`File Explorer`:`Finder`}\" in the apps array \xe2\x80\x94 that single grant covers all of them. To interact with a different app, use open_application to bring it forward.`"
     let pat = re(escapeRe(prefix) & "([\\w$]+)" & escapeRe(suffix))
     let maybeMatch = content.find(pat)
     if maybeMatch.isSome:
       let m = maybeMatch.get()
       let platVar = m.captures[0]
       let newShell =
-        "`${globalThis.__cuKwinMode?`The desktop shell is frontmost. Desktop icons, panels, launchers, and widgets belong to Plasma Shell. To interact with them, call request_access with exactly \\\"plasmashell\\\" in the apps array. If you need the file manager, request \\\"Dolphin\\\" separately. To interact with a different app, use open_application to bring it forward.`:`The desktop shell is frontmost. Double-click, right-click, and Enter on desktop items can launch applications outside the allowlist. To interact with the desktop, taskbar, Start menu, Search, or file manager, call request_access with exactly \\\"${" &
-        platVar &
-        "===\"win32\"?\"File Explorer\":\"Finder\"}\\\" in the apps array \xe2\x80\x94 that single grant covers all of them. To interact with a different app, use open_application to bring it forward.`}`"
+        "(globalThis.__cuKwinMode?`The desktop shell is frontmost. Desktop icons, panels, launchers, and widgets belong to Plasma Shell. To interact with them, call request_access with exactly \"plasmashell\" in the apps array. If you need the file manager, request \"Dolphin\" separately. To interact with a different app, use open_application to bring it forward.`:" &
+        prefix & platVar & suffix & ")"
       let bounds = m.matchBounds
       let old = content[bounds.a .. bounds.b]
       discard replaceLiteralFirst(content, old, newShell)
@@ -885,7 +1008,7 @@ proc apply*(input: string): string =
   # 13b.kwin-shell-grant: shell grant predicate
   block:
     let pat =
-      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3==="darwin"\?\2\.some\(([\w$]+)=>\4\.bundleId===([\w$]+)\):\2\.some\(([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\}"""
+      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3===["`]darwin["`]\?\2\.some\(([\w$]+)=>\4\.bundleId===([\w$]+)\):\2\.some\(([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\}"""
     let n = replaceFirst(
       content,
       pat,
@@ -942,15 +1065,15 @@ proc apply*(input: string): string =
   # 13c: request_access apps — WM_CLASS for Linux
   block:
     let old13c =
-      """'Application display names (e.g. "Slack", "Calendar") or bundle identifiers (e.g. "com.tinyspeck.slackmacgap"). Display names are resolved case-insensitively against installed apps.'"""
+      "`Application display names (e.g. \"Slack\", \"Calendar\") or bundle identifiers (e.g. \"com.tinyspeck.slackmacgap\"). Display names are resolved case-insensitively against installed apps.`"
     let new13c =
       "(process.platform===\"linux\"?" &
-      "'Application names as shown in window titles, or WM_CLASS values " &
+      "`Application names as shown in window titles, or WM_CLASS values " &
       "(e.g. \"firefox\", \"org.gnome.Nautilus\"). " &
-      "On Linux all apps are auto-granted at full tier.'" & ":" &
-      "'Application display names (e.g. \"Slack\", \"Calendar\") or bundle " &
+      "On Linux all apps are auto-granted at full tier.`" & ":" &
+      "`Application display names (e.g. \"Slack\", \"Calendar\") or bundle " &
       "identifiers (e.g. \"com.tinyspeck.slackmacgap\"). Display names are " &
-      "resolved case-insensitively against installed apps.')"
+      "resolved case-insensitively against installed apps.`)"
     if replaceLiteralFirst(content, old13c, new13c) == 1:
       echo "  [OK] 13c request_access apps: Linux identifiers"
       inc descChanges
@@ -961,11 +1084,11 @@ proc apply*(input: string): string =
   # 13d: open_application app identifier
   block:
     let old13d =
-      """'Display name (e.g. "Slack") or bundle identifier (e.g. "com.tinyspeck.slackmacgap").'"""
+      "`Display name (e.g. \"Slack\") or bundle identifier (e.g. \"com.tinyspeck.slackmacgap\").`"
     let new13d =
       "(process.platform===\"linux\"?" &
-      "'Application name or WM_CLASS (e.g. \"firefox\", \"nautilus\").'" & ":" &
-      "'Display name (e.g. \"Slack\") or bundle identifier (e.g. \"com.tinyspeck.slackmacgap\").')"
+      "`Application name or WM_CLASS (e.g. \"firefox\", \"nautilus\").`" & ":" &
+      "`Display name (e.g. \"Slack\") or bundle identifier (e.g. \"com.tinyspeck.slackmacgap\").`)"
     if replaceLiteralFirst(content, old13d, new13d) == 1:
       echo "  [OK] 13d open_application app: Linux identifiers"
       inc descChanges
@@ -981,12 +1104,12 @@ proc apply*(input: string): string =
   # same sentence.
   block:
     let old13e =
-      "The target must already be in the session allowlist \xe2\x80\x94 call request_access first.\",inputSchema:"
+      "The target must already be in the session allowlist \xe2\x80\x94 call request_access first.`,inputSchema:"
     let new13e =
-      "\"+(process.platform===\"linux\"?" &
+      "${process.platform===\"linux\"?" &
       "\"On Linux, all applications are directly accessible.\"" & ":" &
       "\"The target must already be in the session allowlist " &
-      "\xe2\x80\x94 call request_access first.\"),inputSchema:"
+      "\xe2\x80\x94 call request_access first.\"}`,inputSchema:"
     if replaceLiteralFirst(content, old13e, new13e) == 1:
       echo "  [OK] 13e open_application: no allowlist on Linux"
       inc descChanges
@@ -997,7 +1120,7 @@ proc apply*(input: string): string =
   # 13f: screenshot description — clean on Linux
   block:
     let old13f =
-      "\"Take a screenshot of the primary display. On this platform, screenshots are NOT filtered \xe2\x80\x94 all open windows are visible. Input actions targeting apps not in the session allowlist are rejected.\""
+      "`Take a screenshot of the primary display. On this platform, screenshots are NOT filtered \xe2\x80\x94 all open windows are visible. Input actions targeting apps not in the session allowlist are rejected.`"
     let new13f =
       "(process.platform===\"linux\"?" &
       "\"Take a screenshot of the primary display. All open windows are visible.\"" & ":" &
@@ -1014,7 +1137,7 @@ proc apply*(input: string): string =
   # 13g: screenshot suffix — no allowlist error on Linux
   block:
     let pat =
-      re"""([\w$]+)\+" Returns an error if the allowlist is empty\. The returned image is what subsequent click coordinates are relative to\.""""
+      re"""([\w$]+)\+["`] Returns an error if the allowlist is empty\. The returned image is what subsequent click coordinates are relative to\.["`]"""
     let n = replaceFirst(
       content,
       pat,
@@ -1076,9 +1199,9 @@ proc apply*(input: string): string =
 
   # 14c: File Explorer/Finder → 3-way (Dolphin/Files/Finder)
   block:
-    let fmOld = "\"File Explorer\":\"Finder\""
+    let fmOld = "`File Explorer`:`Finder`"
     let fmNew =
-      "\"File Explorer\":process.platform===\"linux\"?(globalThis.__cuKwinMode?\"Dolphin\":\"Files\"):\"Finder\""
+      "`File Explorer`:process.platform===\"linux\"?(globalThis.__cuKwinMode?`Dolphin`:`Files`):`Finder`"
     if replaceLiteralFirst(content, fmOld, fmNew) == 1:
       echo "  [OK] 14c file manager name: 3-way (kwin-wayland=Dolphin, regular=Files, other=Finder)"
       inc changes

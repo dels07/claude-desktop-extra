@@ -25,9 +25,11 @@ proc apply*(input: string): string =
     echo "  [OK] process.argv: already patched (skipped)"
     return input
 
-  # Primary: insert <var>.argv=[] just before exposeInMainWorld("process",<var>)
+  # Primary: insert <var>.argv=[] just before exposeInMainWorld("process",<var>).
+  # Since v1.26832.0 the minifier emits the channel name as a template literal
+  # (`process`), so the quote character is matched as a class.
   let exposePattern =
-    re2"""([\w$]+\.contextBridge\.exposeInMainWorld\("process",)([\w$]+)(\))"""
+    re2"""([\w$]+\.contextBridge\.exposeInMainWorld\(["`]process["`],)([\w$]+)(\))"""
   var m: RegexMatch2
   if input.find(exposePattern, m):
     let varName = input[m.group(1)]

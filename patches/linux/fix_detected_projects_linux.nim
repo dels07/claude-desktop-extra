@@ -6,24 +6,30 @@
 import std/[os, strformat, strutils]
 import regex
 
+# Positive end-state assertion for the idempotency branch: OUR injected
+# `&&process.platform!=="linux"` must sit right before the [detectedProjects]
+# skipping log. Absence of the old `!=="darwin"` pattern is NOT enough (Rule 6).
+proc alreadyPatched(s: string): bool =
+  let idx = s.find("[detectedProjects] skipping")
+  if idx == -1:
+    return false
+  let start = max(0, idx - 200)
+  "&&process.platform!==\"linux\"" in s[start ..< idx]
+
 proc apply*(input: string): string =
   result = input
 
-  # Idempotency check
-  if "process.platform!==\"linux\"" in result and "[detectedProjects]" in result:
-    let idx = result.find("[detectedProjects] skipping")
-    if idx != -1:
-      let start = max(0, idx - 200)
-      let nearby = result[start ..< idx]
-      if "process.platform!==\"linux\"" in nearby:
-        echo "  [SKIP] Already patched (linux platform guard found)"
-        return result
+  if alreadyPatched(result):
+    echo "  [SKIP] Already patched (linux platform guard found)"
+    return result
 
   var allOk = true
 
   # 1. Platform guard in detection entry-point
+  # v1.26832.0: literals are backticks and the logger callee is dotted
+  # (`if(process.platform!==`darwin`)return t.o.debug(`[detectedProjects] skipping`).
   let patGuard =
-    re2"(if\(process\.platform!==""darwin"")(&&process\.platform!==""linux"")?\)(return [\w$]+\.debug\(`\[detectedProjects\] skipping)"
+    re2"(if\(process\.platform!==[""`]darwin[""`])(&&process\.platform!==[""`]linux[""`])?\)(return [\w$]+(?:\.[\w$]+)*\.debug\(`\[detectedProjects\] skipping)"
   var countGuard = 0
   result = result.replace(
     patGuard,
@@ -38,21 +44,23 @@ proc apply*(input: string): string =
     allOk = false
 
   # 2. VSCode / Cursor state DB path
+  # v1.26832.0: `i.default.join((0,a.homedir)(),`Library`,...)` - the path module
+  # is a dotted member and homedir is called through the `(0,ns.fn)()` indirection.
   let patVscode =
-    re2"([\w$]+)\.join\(([\w$]+)\.homedir\(\),""Library"",""Application Support"",([\w$]+),""User"",""globalStorage"",""state\.vscdb""\)"
+    re2"([\w$]+(?:\.[\w$]+)*)\.join\(((?:\(0,[\w$]+(?:\.[\w$]+)*\.homedir\)|[\w$]+(?:\.[\w$]+)*\.homedir)\(\)),[""`]Library[""`],[""`]Application Support[""`],([\w$]+),[""`]User[""`],[""`]globalStorage[""`],[""`]state\.vscdb[""`]\)"
   var countVscode = 0
   result = result.replace(
     patVscode,
     proc(m: RegexMatch2, s: string): string =
       inc countVscode
       let p = s[m.group(0)]
-      let o = s[m.group(1)]
+      let home = s[m.group(1)] # full homedir() call expression, verbatim
       let d = s[m.group(2)]
       let mac =
-        p & ".join(" & o & ".homedir(),\"Library\",\"Application Support\"," & d &
+        p & ".join(" & home & ",\"Library\",\"Application Support\"," & d &
         ",\"User\",\"globalStorage\",\"state.vscdb\")"
       let lin =
-        p & ".join(" & o & ".homedir(),\".config\"," & d &
+        p & ".join(" & home & ",\".config\"," & d &
         ",\"User\",\"globalStorage\",\"state.vscdb\")"
       "(process.platform===\"darwin\"?" & mac & ":" & lin & ")",
   )
@@ -64,20 +72,20 @@ proc apply*(input: string): string =
 
   # 3. Zed state DB path
   let patZed =
-    re2"([\w$]+)\.join\(([\w$]+)\.homedir\(\),""Library"",""Application Support"",""Zed"",""db"",""0-stable"",""db\.sqlite""\)"
+    re2"([\w$]+(?:\.[\w$]+)*)\.join\(((?:\(0,[\w$]+(?:\.[\w$]+)*\.homedir\)|[\w$]+(?:\.[\w$]+)*\.homedir)\(\)),[""`]Library[""`],[""`]Application Support[""`],[""`]Zed[""`],[""`]db[""`],[""`]0-stable[""`],[""`]db\.sqlite[""`]\)"
   var countZed = 0
   result = result.replace(
     patZed,
     proc(m: RegexMatch2, s: string): string =
       inc countZed
       let p = s[m.group(0)]
-      let o = s[m.group(1)]
+      let home = s[m.group(1)] # full homedir() call expression, verbatim
       let mac =
-        p & ".join(" & o &
-        ".homedir(),\"Library\",\"Application Support\",\"Zed\",\"db\",\"0-stable\",\"db.sqlite\")"
+        p & ".join(" & home &
+        ",\"Library\",\"Application Support\",\"Zed\",\"db\",\"0-stable\",\"db.sqlite\")"
       let lin =
-        p & ".join(" & o &
-        ".homedir(),\".local\",\"share\",\"zed\",\"db\",\"0-stable\",\"db.sqlite\")"
+        p & ".join(" & home &
+        ",\".local\",\"share\",\"zed\",\"db\",\"0-stable\",\"db.sqlite\")"
       "(process.platform===\"darwin\"?" & mac & ":" & lin & ")",
   )
   if countZed > 0:
@@ -109,6 +117,8 @@ when isMainModule:
   if output != input:
     writeFile(file, output)
     echo "  [PASS] Detected Projects patched for Linux"
+  elif alreadyPatched(output):
+    echo "  [PASS] Detected Projects already patched for Linux (idempotent)"
   else:
     echo "  [FAIL] No changes made"
     quit(1)

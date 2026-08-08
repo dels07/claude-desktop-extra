@@ -152,9 +152,12 @@ for patch_file in "$PATCHES_DIR"/*/*.nim "$PATCHES_DIR"/*/*.js; do
         target_dir=$(dirname "$actual_target")
         target_base=$(basename "$actual_target")
         target_stem="${target_base%.js}"
-        if compgen -G "$target_dir/$target_stem.chunk-*.js" > /dev/null; then
+        # Since v1.26832.0 a second chunk family (index2.chunk-*.js) belongs to
+        # the same logical bundle, so the glob accepts an optional suffix after
+        # the stem - keep in sync with chunk_parts() in apply_patches.py.
+        if compgen -G "$target_dir/$target_stem*.chunk-*.js" > /dev/null; then
             cat "$actual_target" > "$tmp_file"
-            for chunk in "$target_dir/$target_stem".chunk-*.js; do
+            for chunk in "$target_dir/$target_stem"*.chunk-*.js; do
                 printf '\n/*__CDB_SPLIT__%s__*/\n' "$(basename "$chunk")" >> "$tmp_file"
                 cat "$chunk" >> "$tmp_file"
             done

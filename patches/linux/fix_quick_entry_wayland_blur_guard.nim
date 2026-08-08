@@ -17,7 +17,9 @@ proc apply*(input: string): string =
     echo &"  [INFO] {FOCUS_GLOBAL} already present -- skipped"
     return result
 
-  let pat = re2"([\w$]+)\.on\(""blur"",\(\)=>\{([\w$]+)\(null\)\}\)"
+  # v1.26832.0 emits event names as backtick template literals, so the quote
+  # character is matched quote-agnostically.
+  let pat = re2"([\w$]+)\.on\([""`]blur[""`],\(\)=>\{([\w$]+)\(null\)\}\)"
 
   var count = 0
   var resultStr = ""

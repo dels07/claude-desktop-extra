@@ -16,21 +16,34 @@ import regex
 proc apply*(input: string): string =
   # Pattern: the ternary that gates openDirectory behind darwin-only
   #
-  # Original: process.platform==="darwin"?["openFile","openDirectory","multiSelections"]:["openFile","multiSelections"]
-  # Patched:  process.platform==="darwin"||process.platform==="linux"?["openFile","openDirectory","multiSelections"]:["openFile","multiSelections"]
+  # Original: process.platform===`darwin`?[`openFile`,`openDirectory`,`multiSelections`]:[`openFile`,`multiSelections`]
+  # Patched:  process.platform===`darwin`||process.platform==="linux"?[`openFile`,…]:[`openFile`,…]
   #
-  # All tokens here are stable Electron/Node API names (no minified variables).
+  # All tokens here are stable Electron/Node API names (no minified variables),
+  # but the quoting is minifier-dependent: v1.26832.0 emits backtick template
+  # literals where earlier builds emitted double quotes, so every string literal
+  # is matched with the quote-agnostic ["`] class. The property arrays are
+  # captured verbatim and re-emitted unchanged, so we never rewrite upstream's
+  # quoting - only the platform test is extended.
+  #
+  # Idempotency: positively assert OUR injected `||process.platform==="linux"`
+  # sits at this exact site (not merely that the darwin-only form is gone).
+  let alreadyPatched =
+    re2"""process\.platform===["`]darwin["`]\|\|process\.platform==="linux"\?\[["`]openFile["`],["`]openDirectory["`]"""
+  var am: RegexMatch2
+  if input.find(alreadyPatched, am):
+    echo "  [OK] browseFiles openDirectory: already patched (skipped)"
+    return input
+
   let pattern =
-    re2"""process\.platform==="darwin"\?\["openFile","openDirectory","multiSelections"\]:\["openFile","multiSelections"\]"""
-  let replacement =
-    """process.platform==="darwin"||process.platform==="linux"?["openFile","openDirectory","multiSelections"]:["openFile","multiSelections"]"""
+    re2"""(process\.platform===["`]darwin["`])(\?\[["`]openFile["`],["`]openDirectory["`],["`]multiSelections["`]\]:\[["`]openFile["`],["`]multiSelections["`]\])"""
 
   var count = 0
   result = input.replace(
     pattern,
     proc(m: RegexMatch2, s: string): string =
       inc count
-      replacement,
+      s[m.group(0)] & "||process.platform===\"linux\"" & s[m.group(1)],
   )
   if count == 0:
     echo "  [FAIL] browseFiles openDirectory: 0 matches"
@@ -53,4 +66,4 @@ when isMainModule:
     writeFile(filePath, output)
     echo "  [PASS] Browse files dialog patched successfully"
   else:
-    echo "  [WARN] No changes made"
+    echo "  [PASS] Browse files dialog already patched for Linux"

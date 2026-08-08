@@ -32,6 +32,14 @@
 #           : ["/usr/share/OVMF/OVMF_CODE_4M.fd","/usr/share/OVMF/OVMF_CODE.fd"],
 #   Loi = ["/usr/libexec/virtiofsd","/usr/bin/virtiofsd"]
 #
+# v1.26832.0 kept this shape verbatim but the new minifier emits every string as
+# a backtick template literal (OT=process.arch===`arm64`?[`/usr/share/AAVMF/...`]
+# :[...], kT=[`/usr/libexec/virtiofsd`,`/usr/bin/virtiofsd`]). Still Debian-only:
+# no /usr/share/edk2 candidate exists anywhere in the bundle, so nothing here is
+# upstreamed. All three anchors accept either quoting now; the values we splice
+# in stay double-quoted (valid JS either way, and it keeps the already-patched
+# detection below a plain substring check).
+#
 # The firmware resolver i_t(boi) returns the FIRST readable path, and the _VARS
 # companion is derived by s.replace("OVMF_CODE","OVMF_VARS") / ("AAVMF_CODE",
 # "AAVMF_VARS"), so every CODE path we add must have a matching VARS file with the
@@ -110,7 +118,7 @@ proc apply*(input: string): string =
   # Anchoring on `]:[` (the ternary's arm-array close + x64-array open) makes the
   # match unambiguous even though "/usr/share/OVMF/OVMF_CODE_4M.fd" is short.
   # group0 = `]:[`   group1 = `"/usr/share/OVMF/OVMF_CODE_4M.fd"`  (x64 first value)
-  let firmwarePattern = re2"""(\]:\[)("/usr/share/OVMF/OVMF_CODE_4M\.fd")"""
+  let firmwarePattern = re2"""(\]:\[)(["`]/usr/share/OVMF/OVMF_CODE_4M\.fd["`])"""
   var countA = 0
   let alreadyFirmware =
     "/usr/share/edk2/x64/OVMF_CODE.4m.fd" in result and envFirmware & extraX64 in result
@@ -135,11 +143,15 @@ proc apply*(input: string): string =
   # group0 = `[`  group1 = `"/usr/libexec/virtiofsd",`  group2 = `"/usr/bin/virtiofsd"`
   # Env override goes FIRST (before the system paths), extras keep their old
   # position between the two Debian candidates.
-  let virtiofsdPattern = re2"""(\[)("/usr/libexec/virtiofsd",)("/usr/bin/virtiofsd")"""
+  let virtiofsdPattern =
+    re2"""(\[)(["`]/usr/libexec/virtiofsd["`],)(["`]/usr/bin/virtiofsd["`])"""
   var countB = 0
+  # Quote-agnostic already-check: our env spread must sit immediately before the
+  # (upstream-quoted, backticks since v1.26832.0) first Debian candidate.
+  let virtiofsdInjected =
+    re2"""\.\.\.\(process\.env\.CLAUDE_VIRTIOFSD_PATH\?\[process\.env\.CLAUDE_VIRTIOFSD_PATH\]:\[\]\),["`]/usr/libexec/virtiofsd"""
   let alreadyVirtiofsd =
-    "/usr/lib/virtiofsd" in result and
-    envVirtiofsd & "\"/usr/libexec/virtiofsd\"" in result
+    "/usr/lib/virtiofsd" in result and result.contains(virtiofsdInjected)
   if alreadyVirtiofsd:
     echo "  [OK] virtiofsd paths: env override + non-Debian candidate already present"
     inc patchesApplied
@@ -160,9 +172,11 @@ proc apply*(input: string): string =
   # --- Patch C: env override for the arm64 AAVMF firmware array --------------
   # The arm64 arm needs no extra fixed paths (see above), but the env override
   # must reach it too. group0 = `?[`  group1 = `"/usr/share/AAVMF/AAVMF_CODE.fd"`
-  let aavmfPattern = re2"""(\?\[)("/usr/share/AAVMF/AAVMF_CODE\.fd")"""
+  let aavmfPattern = re2"""(\?\[)(["`]/usr/share/AAVMF/AAVMF_CODE\.fd["`])"""
   var countC = 0
-  let alreadyAavmf = envFirmware & "\"/usr/share/AAVMF/AAVMF_CODE.fd\"" in result
+  let aavmfInjected =
+    re2"""\.\.\.\(process\.env\.CLAUDE_OVMF_CODE_PATH\?\[process\.env\.CLAUDE_OVMF_CODE_PATH\]:\[\]\),["`]/usr/share/AAVMF/AAVMF_CODE\.fd"""
+  let alreadyAavmf = result.contains(aavmfInjected)
   if alreadyAavmf:
     echo "  [OK] arm64 firmware: env override already present"
     inc patchesApplied

@@ -22,8 +22,12 @@ proc apply*(input: string): string =
     echo "  [SKIP] A already patched"
     inc patchesApplied
   else:
+    # v1.24012.9: function X(A){return(A==null?void 0:A.mode)==="ccd"}
+    # v1.26832.0: function $(e){return e?.mode===`ccd`}
+    # The minifier now emits native optional chaining and backtick literals, so
+    # accept either desugaring and either quoting.
     let m = result.find(
-      re"""function ([\w$]+)\(([\w$]+)\)\{return\((\2)==null\?void 0:\3\.mode\)==="ccd"\}"""
+      re"""function ([\w$]+)\(([\w$]+)\)\{return\s*(?:\(\2==null\?void 0:\2\.mode\)|\2\?\.mode)===["`]ccd["`]\}"""
     )
     if m.isSome:
       let c = m.get.captures
@@ -44,12 +48,13 @@ proc apply*(input: string): string =
     inc patchesApplied
   else:
     # Try new pattern (v1.8089+): if(X.scope==="user")return this.entryToPluginInfo(A,X,B,C);
+    # v1.26832.0 quotes the scope literal with backticks, hence the ["`] class.
     let mNew = result.find(
-      re"""if\(([\w$]+)\.scope===\"user\"\)return this\.entryToPluginInfo\(([\w$]+),\1,([\w$]+),([\w$]+)\);"""
+      re"""if\(([\w$]+)\.scope===["`]user["`]\)return this\.entryToPluginInfo\(([\w$]+),\1,([\w$]+),([\w$]+)\);"""
     )
     # Try old pattern: if(X.scope==="user"){Y.push(this.entryToPluginInfo(A,X,B,C));continue}
     let mOld = result.find(
-      re"""if\(([\w$]+)\.scope===\"user\"\)\{([\w$]+)\.push\(this\.entryToPluginInfo\(([\w$]+),\1,([\w$]+),([\w$]+)\)\);continue\}"""
+      re"""if\(([\w$]+)\.scope===["`]user["`]\)\{([\w$]+)\.push\(this\.entryToPluginInfo\(([\w$]+),\1,([\w$]+),([\w$]+)\)\);continue\}"""
     )
     if mNew.isSome:
       let c = mNew.get.captures

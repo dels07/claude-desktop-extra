@@ -21,8 +21,12 @@ proc apply*(input: string): string =
   result = input
   var failed = false
 
-  # Step 1: Find the tray function name from menuBarEnabled listener
-  let listenerPat = re2"[\w$]+\.on\(""menuBarEnabled"",\(\)=>\{([\w$]+)\(\)\}\)"
+  # Step 1: Find the tray function name from menuBarEnabled listener.
+  # v1.26832.0: the emitter is reached through a namespace alias (E.t.on) and
+  # the event name is a template literal, so allow member chains and either
+  # quoting.
+  let listenerPat =
+    re2"[\w$]+(?:\.[\w$]+)*\.on\([""`]menuBarEnabled[""`],\(\)=>\{([\w$]+)\(\)\}\)"
   var trayFunc = ""
   for m in result.findAll(listenerPat):
     trayFunc = result[m.group(0)]
@@ -44,9 +48,23 @@ proc apply*(input: string): string =
   var stateArr = ""
   var stateBool = ""
   var secondNull = ""
+  # Minified identifiers are scoped per code-split chunk, and the orchestrator
+  # concatenates every chunk into one file, so the same name can be declared in
+  # several unrelated chunks. Steps 3 and 5 rewrite this declaration with plain
+  # string replacement (which hits every occurrence), so the declaration must be
+  # unique or we would rewrite strangers' functions.
+  var funcDecls = 0
   if trayFunc != "":
-    let funcStart = result.find("function " & trayFunc & "(){")
-    if funcStart >= 0:
+    let decl = "function " & trayFunc & "(){"
+    var scanFrom = 0
+    while true:
+      let funcStart = result.find(decl, scanFrom)
+      if funcStart < 0:
+        break
+      inc funcDecls
+      scanFrom = funcStart + decl.len
+      if trayVar != "":
+        continue
       let snippetEnd = min(funcStart + 2000, result.len)
       let body = result[funcStart ..< snippetEnd]
       # v1.17282.0 shape: guarded by !isDestroyed(), two state vars reset before
@@ -75,6 +93,12 @@ proc apply*(input: string): string =
             trayVar = v1
             break
 
+    if funcDecls != 1:
+      echo &"  [FAIL] tray function declaration: {funcDecls} occurrence(s) of " &
+        &"'{decl}', expected exactly 1 (a same-named function in another chunk " &
+        "would be rewritten too)"
+      failed = true
+
     if trayVar == "":
       echo "  [FAIL] tray variable: 0 matches, expected >= 1"
       failed = true
@@ -98,8 +122,11 @@ proc apply*(input: string): string =
   # Step 4: Find first const variable in the function
   var firstConst = ""
   if trayFunc != "":
-    let constPat =
-      re2("async function " & escapeRe(trayFunc) & "\\(\\)\\{.+?const ([\\w$]+)=")
+    # v1.26832.0's minifier prefers `let` over `const`, so accept any of the
+    # three declaration keywords.
+    let constPat = re2(
+      "async function " & escapeRe(trayFunc) & "\\(\\)\\{.+?(?:const|let|var) ([\\w$]+)="
+    )
     for m in result.findAll(constPat):
       firstConst = result[m.group(0)]
       break
@@ -154,8 +181,9 @@ proc apply*(input: string): string =
   # fix_tray_icon_theme), so destroying and recreating the tray on theme
   # change is pointless and causes ghost icons on XFCE/StatusNotifierWatcher.
   if trayFunc != "":
+    # The event name is a template literal since v1.26832.0; accept either quoting.
     let themeCallPat = re2(
-      "(nativeTheme\\.on\\(\"updated\",\\(\\)=>\\{[^}]*?[\\w$]+\\(\\),)" &
+      "(nativeTheme\\.on\\([\"`]updated[\"`],\\(\\)=>\\{[^}]*?[\\w$]+\\(\\),)" &
         escapeRe(trayFunc) & "\\(\\),"
     )
     var themeCount = 0
@@ -167,17 +195,26 @@ proc apply*(input: string): string =
     )
     if themeCount > 0:
       echo &"  [OK] nativeTheme handler: removed {trayFunc}() call (Linux icon is static)"
-    elif ("nativeTheme.on(\"updated\"" in result) and (
-      trayFunc & "()" notin
-      result[
-        result.find("nativeTheme.on(\"updated\"") ..
-          result.find("nativeTheme.on(\"updated\"") + 200
-      ]
-    ):
-      echo "  [INFO] nativeTheme handler: tray call already absent"
     else:
-      echo &"  [FAIL] nativeTheme handler: could not remove {trayFunc}() call"
-      failed = true
+      # Already-applied detection: positively locate every nativeTheme "updated"
+      # handler and assert none of them still calls the tray function. Merely
+      # not matching the pattern above is not enough — that would also be true
+      # if upstream restructured the handler out from under us.
+      let handlerPat = re2"""nativeTheme\.on\(["`]updated["`],\(\)=>\{[^}]*?\}"""
+      var handlers = 0
+      var stillCalls = false
+      for m in result.findAll(handlerPat):
+        inc handlers
+        let b = m.boundaries
+        if (trayFunc & "()") in result[b.a .. b.b]:
+          stillCalls = true
+      if handlers > 0 and not stillCalls:
+        echo &"  [INFO] nativeTheme handler: {trayFunc}() call already absent " &
+          &"({handlers} handler(s) inspected)"
+      else:
+        echo &"  [FAIL] nativeTheme handler: could not remove {trayFunc}() call " &
+          &"(handlers={handlers} stillCalls={stillCalls})"
+        failed = true
 
   if failed:
     raise

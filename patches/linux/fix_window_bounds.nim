@@ -42,8 +42,11 @@ proc apply*(input: string): string =
     # `,Cft(tt)` call after the MAIN_WINDOW setup call which broke the old adjacency anchor.
     # v1.19367.0 changed the window variable from a minified local (`it`) to a dotted
     # property path (`exports.mainWindow`), so winVar allows `.`-joined segments.
+    # v1.26832.0 moved the logger-tagging helper and the window-name enum behind chunk
+    # namespaces (`t.c(J.webContents,t.n.MAIN_WINDOW)`), so the setup call's callee and
+    # the enum holder are dotted chains too.
     let mainWinPattern =
-      nre.re"(function [\w$]+\([\w$]+\)\{return )([\w$]+(?:\.[\w$]+)*)=new ([\w$]+)\.BrowserWindow\(([\w$]+)\),(.*?)([\w$]+\(\2\.webContents,[\w$]+\.MAIN_WINDOW\))(.*?),\2\}"
+      nre.re"(function [\w$]+\([\w$]+\)\{return )([\w$]+(?:\.[\w$]+)*)=new ([\w$]+)\.BrowserWindow\(([\w$]+)\),(.*?)([\w$]+(?:\.[\w$]+)*\(\2\.webContents,[\w$]+(?:\.[\w$]+)*\.MAIN_WINDOW\))(.*?),\2\}"
 
     let m1 = result.find(mainWinPattern)
     if m1.isSome:

@@ -4,7 +4,7 @@
 # Four patches: position function, fallback display, position restore, show/focus fix.
 # Uses std/nre for backreference support in patterns.
 
-import std/[os, strformat, options]
+import std/[os, strformat, strutils, options]
 import std/nre
 
 # Resolve the bundled x11-bridge binary (cached in globalThis.__qeX11Bridge).
@@ -43,10 +43,18 @@ proc apply*(input: string): string =
   result = input
   var failed = false
 
+  # Idempotency: every sub-patch below emits cursorIife, whose __qeCursorLogged
+  # global is unique to us. Its presence is a positive assertion that our
+  # injection landed -- not merely that the pre-patch shape is gone.
+  if strutils.contains(result, "__qeCursorLogged"):
+    echo "  [OK] cursor-display position patches already present (idempotent)"
+    return result
+
   # Patch 1: Position function -- getPrimaryDisplay -> getDisplayNearestPoint
-  # No backreference needed here
+  # No backreference needed here. v1.26832.0's minifier prefers `let` over
+  # `const`, so the declaration keyword is matched permissively.
   let pattern1 =
-    re"(function [\w$]+\(\)\{const [\w$]+=)([\w$]+)(\.screen\.)getPrimaryDisplay\(\)"
+    re"(function [\w$]+\(\)\{(?:const|let|var) [\w$]+=)([\w$]+)(\.screen\.)getPrimaryDisplay\(\)"
   var count1 = 0
   result = result.replace(
     pattern1,
@@ -63,8 +71,11 @@ proc apply*(input: string): string =
     echo "  [FAIL] position function: 0 matches, expected >= 1"
     failed = true
 
-  # Patch 2 (optional): Fallback display lookup -- uses \1 backreference
-  let pattern2 = nre.re"([\w$])\|\|\(\1=([\w$]+)\.screen\.getPrimaryDisplay\(\)\)"
+  # Patch 2 (optional): Fallback display lookup.
+  # Up to v1.24012.x the minifier expanded this to `x||(x=E.screen.getPrimaryDisplay())`
+  # (which needed a \1 backreference); v1.26832.0 emits the logical-assignment
+  # operator instead, so the variable appears only once.
+  let pattern2 = nre.re"([\w$]+)\|\|=([\w$]+)\.screen\.getPrimaryDisplay\(\)"
   var count2 = 0
   # findAll + manual replace
   var pos = 0
@@ -76,8 +87,7 @@ proc apply*(input: string): string =
     let cursor = cursorIife(electronVar)
     resultStr &= result[pos ..< m.matchBounds.a]
     resultStr &=
-      varName & "||(" & varName & "=" & electronVar & ".screen.getDisplayNearestPoint(" &
-      cursor & "))"
+      varName & "||=" & electronVar & ".screen.getDisplayNearestPoint(" & cursor & ")"
     pos = m.matchBounds.b + 1
   if count2 > 0:
     resultStr &= result[pos .. ^1]
@@ -86,10 +96,12 @@ proc apply*(input: string): string =
   else:
     echo "  [INFO] fallback display: 0 matches (pattern removed in this version, optional)"
 
-  # Patch 3: Override position-restore to always use cursor's display
-  # No backreferences needed
+  # Patch 3: Override position-restore to always use cursor's display.
+  # No backreferences needed. v1.26832.0: `let` instead of `const`, the settings
+  # store moved behind a chunk namespace (`i.b.get(...)`), and the key is a
+  # backtick template literal.
   let pattern3 =
-    re"""(function [\w$]+\(\)\{const [\w$]+=[\w$]+\.get\("quickWindowPosition",null\),[\w$]+=[\w$]+\.screen\.getAllDisplays\(\);if\(!\()[\w$]+&&[\w$]+\.absolutePointInWorkspace&&[\w$]+\.monitor&&[\w$]+\.relativePointFromMonitor(\)\)return )([\w$]+)\(\)"""
+    re"""(function [\w$]+\(\)\{(?:const|let|var) [\w$]+=[\w$]+(?:\.[\w$]+)*\.get\([`"]quickWindowPosition[`"],null\),[\w$]+=[\w$]+\.screen\.getAllDisplays\(\);if\(!\()[\w$]+&&[\w$]+\.absolutePointInWorkspace&&[\w$]+\.monitor&&[\w$]+\.relativePointFromMonitor(\)\)return )([\w$]+)\(\)"""
   var count3 = 0
   result = result.replace(
     pattern3,

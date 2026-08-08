@@ -64,8 +64,10 @@ proc apply*(input: string): string =
   # The number of matching functions varies per upstream release (2 through
   # v1.10628.2, 1 in v1.11187.4 after chillingSlothFeat moved to the `oW` gate),
   # so accept >=1 (see the matches.len branches below).
+  # v1.26832.0: the minifier switched string literals to backticks, so every
+  # literal below accepts either quoting.
   let pattern1 =
-    re"""(function )([\w$]+)(\(\)\{return )process\.platform!=="darwin"(?:&&process\.platform!=="win32")?\?\{status:"unavailable"\}:(\{status:"supported"\}\})"""
+    re"""(function )([\w$]+)(\(\)\{return )process\.platform!==["`]darwin["`](?:&&process\.platform!==["`]win32["`])?\?\{status:["`]unavailable["`]\}:(\{status:["`]supported["`]\}\})"""
 
   var matches: seq[RegexMatch] = @[]
   var pos = 0
@@ -135,8 +137,8 @@ proc apply*(input: string): string =
   # gate to win32 / drops the linux mapper, this FAILs loud — Cowork would silently
   # vanish from Linux otherwise.
   let eAMapsLinux =
-    re"""switch\([\w$]+\)\{case"darwin":case"linux":return"unix";case"win32":return"win32""""
-  let supportIndexesLinux = re"""\.files\[[\w$]+\("linux"\)\]\[[\w$]+\]"""
+    re"""switch\([\w$]+\)\{case["`]darwin["`]:case["`]linux["`]:return["`]unix["`];case["`]win32["`]:return["`]win32["`]"""
+  let supportIndexesLinux = re"""\.files\[[\w$]+\(["`]linux["`]\)\]\[[\w$]+\]"""
   if result.find(eAMapsLinux).isSome and result.find(supportIndexesLinux).isSome:
     echo "  [OK] yukonSilver: native Linux Cowork support path present (linux->\"unix\" bundle key + eo.files[e_A(\"linux\")][arch], gated on are() KVM probe) — regression guard satisfied"
     inc patchesApplied
@@ -248,7 +250,8 @@ proc apply*(input: string): string =
   # claude.ai unspoofed. Assert the header builder still sends the raw
   # `.platform` read (so a stale pre-built binary or a merge resurrection of the
   # spoof fails loud), per AGENTS.md Rule 6 (positive end-state assertion).
-  let headerUnspoofed = re"""\["anthropic-client-os-platform",[\w$]+\.platform\]"""
+  let headerUnspoofed =
+    re"""\[["`]anthropic-client-os-platform["`],[\w$]+(?:\.[\w$]+)*\.platform\]"""
   if result.find(headerUnspoofed).isSome:
     echo "  [OK] platform reporting: anthropic-client-os-platform sends the real platform (spoofs removed for issue #173)"
     inc patchesApplied

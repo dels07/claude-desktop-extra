@@ -176,10 +176,29 @@ proc apply*(input: string): string =
   result = input
 
   # -----------------------------------------------------------------
+  # 0. Idempotency: assert BOTH of our injected end-states are present
+  #    (the pre-create CHROME_DESKTOP swap and the ready-to-show reset),
+  #    never merely that the pre-patch shape is gone.
+  # -----------------------------------------------------------------
+  let swapApplied =
+    ("process.env.CHROME_DESKTOP=\"" & QE_APP_ID & ".desktop\"") in result
+  let resetApplied = "__qeAppIdReadErr" in result
+  if swapApplied and resetApplied:
+    echo "  [OK] Quick Entry app_id swap + reset already present (idempotent)"
+    return result
+  if swapApplied != resetApplied:
+    echo "  [FAIL] Half-applied Quick Entry app_id patch (swap=" & $swapApplied &
+      ", reset=" & $resetApplied & ") -- re-audit"
+    quit(1)
+
+  # -----------------------------------------------------------------
   # 1. Pre-create: swap CHROME_DESKTOP to the Quick Entry id.
   # -----------------------------------------------------------------
+  # v1.26832.0 switched the minifier to backtick template literals for most
+  # string literals (`hidden` instead of "hidden"), so the quote character is
+  # captured and re-emitted verbatim rather than hardcoded.
   let preCreatePattern = re2(
-    r"""([\w$]+)\|\|\(([\w$]+)=new ([\w$]+)\.BrowserWindow\(\{titleBarStyle:"hidden""""
+    r"""([\w$]+)\|\|\(([\w$]+)=new ([\w$]+)\.BrowserWindow\(\{titleBarStyle:(["`])hidden"""
   )
   var preCount = 0
   result = result.replace(
@@ -188,17 +207,18 @@ proc apply*(input: string): string =
       let w1 = s[m.group(0)]
       let w2 = s[m.group(1)]
       let electronVar = s[m.group(2)]
+      let q = s[m.group(3)]
       if w1 != w2:
         # The short-circuit target and assignment LHS must be the same
         # var; bail out by reconstructing the original match.
         return
-          w1 & "||(" & w2 & "=new " & electronVar &
-          ".BrowserWindow({titleBarStyle:\"hidden\""
+          w1 & "||(" & w2 & "=new " & electronVar & ".BrowserWindow({titleBarStyle:" & q &
+          "hidden"
       inc preCount
       w1 & "||(" & "process.env.CHROME_DESKTOP=\"" & QE_APP_ID & ".desktop\"," &
         "(typeof " & electronVar & ".app.setDesktopName===\"function\"&&" & electronVar &
         ".app.setDesktopName(\"" & QE_APP_ID & ".desktop\"))," & w2 & "=new " &
-        electronVar & ".BrowserWindow({titleBarStyle:\"hidden\"",
+        electronVar & ".BrowserWindow({titleBarStyle:" & q & "hidden",
   )
   if preCount != 1:
     echo "  [FAIL] Expected 1 Quick Entry pre-create pattern, got " & $preCount
@@ -209,8 +229,11 @@ proc apply*(input: string): string =
   # -----------------------------------------------------------------
   # 2. Post-create: schedule reset on the window's ready-to-show.
   # -----------------------------------------------------------------
+  # The path module is a dotted chain since v1.26832.0 (`p.default.join(...)`,
+  # from the interop `e.a(require("node:path"))` wrapper), and the path literal
+  # is a backtick template literal.
   let loadFilePattern = re2(
-    r"""(([\w$]+)\.loadFile\(([\w$]+)\.join\(([\w$]+)\.app\.getAppPath\(\),"\.vite/renderer/quick_window/quick-window\.html"\)\))"""
+    r"""(([\w$]+)\.loadFile\(([\w$]+(?:\.[\w$]+)*)\.join\(([\w$]+)\.app\.getAppPath\(\),["`]\.vite/renderer/quick_window/quick-window\.html["`]\)\))"""
   )
   var postCount = 0
   result = result.replace(
@@ -219,8 +242,12 @@ proc apply*(input: string): string =
       inc postCount
       let original = s[m.group(0)]
       let winVar = s[m.group(1)]
-      let electronVar = s[m.group(2)]
-      let joinVar = s[m.group(3)]
+      # group 2 is the *path* module (`p.default`), group 3 is *electron* (`m`).
+      # These two were transposed before v1.26832.0, which made the whole reset
+      # block below throw into its own catch and silently no-op (path.app is
+      # undefined, electron.join is not a function).
+      let joinVar = s[m.group(2)]
+      let electronVar = s[m.group(3)]
       # Resolve the main app_id from the app's own package.json `desktopName`
       # at runtime - that is what Chromium's GetXdgAppId() derives the default
       # window app_id from, so resetting to it restores the exact identity

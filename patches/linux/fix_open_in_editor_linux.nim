@@ -68,7 +68,8 @@ proc apply*(input: string): string =
   if PATCHED_MARKER in input:
     echo "  [OK] getApplicationInfoForProtocol Linux shim: already patched (skipped)"
   else:
-    let pattern1 = re2"""(\w+)\.app\.getApplicationInfoForProtocol\(([^()]+)\)"""
+    let pattern1 =
+      re2"""([\w$]+(?:\.[\w$]+)*)\.app\.getApplicationInfoForProtocol\(([^()]+)\)"""
     var count1 = 0
     result = result.replace(
       pattern1,
@@ -78,12 +79,22 @@ proc apply*(input: string): string =
         let a = s[m.group(1)]
         LINUX_SHIM_HEAD & a & "):" & v & ".app.getApplicationInfoForProtocol(" & a & "))",
     )
-    # Expected sites (clean .deb bundle, 2026-06 build): 7
-    #   2× link-open dialogs (mailto/external): name+icon
-    #   3× "vscode://" literal: isVSCodeInstalled / openInVSCode / openInEditor
-    #   2× <table>.protocol: editor/Xcode detection
-    if count1 < 5:
-      echo &"  [FAIL] getApplicationInfoForProtocol shim: {count1} match(es), expected >= 5"
+    # Expected sites (clean .deb bundle, v1.26832.0): 4
+    #   2× link-open dialogs (mailto/external): read .name and .icon
+    #   2× <editorTable>.protocol: editor/Xcode installed-detection and the
+    #      open path, both of which gate on `.path` being truthy
+    #
+    # v1.24012.9 had 6: the two above pairs plus TWO copies of a legacy
+    # `isVSCodeInstalled(){…getApplicationInfoForProtocol("vscode://")}` method
+    # (duplicated across chunks). v1.26832.0 deleted both - `isVSCodeInstalled`
+    # and the "vscode://" call-site literal are gone from the bundle entirely,
+    # and VS Code detection now flows through the generic editor table
+    # (`{[VSCode]:{protocol:`vscode://`,name:`VS Code`}, …}`) consumed by the two
+    # `.protocol` sites. That is an upstream dedup, NOT native Linux support:
+    # both surviving sites still gate on Electron's macOS/Windows-only
+    # getApplicationInfoForProtocol, so the shim stays load-bearing.
+    if count1 < 4:
+      echo &"  [FAIL] getApplicationInfoForProtocol shim: {count1} match(es), expected >= 4"
       raise newException(
         ValueError,
         "fix_open_in_editor_linux: too few getApplicationInfoForProtocol sites",
@@ -102,13 +113,13 @@ proc apply*(input: string): string =
   # Positively assert that exact guarded shape (not a loose substring that other
   # Linux patches could also produce) before accepting "already patched".
   let guardedPat =
-    re2"""&&process\.platform!=="linux"&&\([\w$]+=await [\w$]+\.app\.getFileIcon\([\w$]+\.path,\{size:"normal"\}\)\)"""
+    re2"""&&process\.platform!=="linux"&&\([\w$]+=await [\w$]+(?:\.[\w$]+)*\.app\.getFileIcon\([\w$]+\.path,\{size:"normal"\}\)\)"""
   var gm: RegexMatch2
   if result.find(guardedPat, gm):
     echo "  [OK] getFileIcon Linux guard: already present (skipped)"
   else:
     let pattern2 =
-      re2"""\(!(\w+)\|\|(\w+)\.isEmpty\(\)\)&&\((\w+)=await (\w+)\.app\.getFileIcon\((\w+)\.path,\{size:"normal"\}\)\)"""
+      re2"""\(!([\w$]+)\|\|([\w$]+)\.isEmpty\(\)\)&&\(([\w$]+)=await ([\w$]+(?:\.[\w$]+)*)\.app\.getFileIcon\(([\w$]+)\.path,\{size:["`]normal["`]\}\)\)"""
     var count2 = 0
     result = result.replace(
       pattern2,

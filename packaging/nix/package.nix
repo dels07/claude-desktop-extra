@@ -226,10 +226,10 @@ stdenvNoCC.mkDerivation {
         in "--prefix PATH : ${path}"
       ) extraSessionPaths}
 
-    # Install icon
-    if [ -f icons/claude-desktop.png ]; then
-      mkdir -p $out/share/icons/hicolor/256x256/apps
-      cp icons/claude-desktop.png $out/share/icons/hicolor/256x256/apps/claude-desktop.png
+    # Install every icon size the tarball carries
+    if [ -d icons/hicolor ]; then
+      mkdir -p $out/share/icons
+      cp -a icons/hicolor $out/share/icons/
     fi
 
     # Upstream license notice (tarball root, from the official .deb's

@@ -101,7 +101,7 @@ mkdir -p "$DEB_ROOT/DEBIAN"
 mkdir -p "$DEB_ROOT/usr/lib/claude-desktop"
 mkdir -p "$DEB_ROOT/usr/bin"
 mkdir -p "$DEB_ROOT/usr/share/applications"
-mkdir -p "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$DEB_ROOT/usr/share/icons"
 
 # Install the official Claude Desktop tree VERBATIM (from the tarball's
 # claude-desktop/ dir): the Electron runtime, resources/app.asar (our patched
@@ -156,10 +156,9 @@ Name=New Claude Code session
 Exec=claude-desktop claude://code/new
 EOF
 
-# Install icon
-if [ -f "$WORK_DIR/tarball/icons/claude-desktop.png" ]; then
-    cp "$WORK_DIR/tarball/icons/claude-desktop.png" \
-        "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/claude-desktop.png"
+# Install every icon size the tarball carries
+if [ -d "$WORK_DIR/tarball/icons/hicolor" ]; then
+    cp -a "$WORK_DIR/tarball/icons/hicolor" "$DEB_ROOT/usr/share/icons/"
 fi
 
 # Debian policy: ship a copyright file under usr/share/doc/<pkg>/. The tarball

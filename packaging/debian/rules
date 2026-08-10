@@ -23,9 +23,9 @@ override_dh_auto_install:
 	install -d debian/claude-desktop/usr/share/applications
 	install -m644 debian/com.anthropic.Claude.desktop debian/claude-desktop/usr/share/applications/
 
-	# Install icon
-	install -d debian/claude-desktop/usr/share/icons/hicolor/256x256/apps
-	install -m644 icons/claude-desktop.png debian/claude-desktop/usr/share/icons/hicolor/256x256/apps/
+	# Install every icon size the tarball carries
+	install -d debian/claude-desktop/usr/share/icons
+	cp -a icons/hicolor debian/claude-desktop/usr/share/icons/
 
 override_dh_strip:
 	# Don't strip - Electron binaries don't like it

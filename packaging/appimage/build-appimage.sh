@@ -201,10 +201,11 @@ cp "$APPDIR/com.anthropic.Claude.desktop" "$APPDIR/usr/share/applications/"
 
 # Copy icon
 log_info "Installing icon..."
-if [ -f "$WORK_DIR/tarball/icons/claude-desktop.png" ]; then
-    cp "$WORK_DIR/tarball/icons/claude-desktop.png" "$APPDIR/claude-desktop.png"
-    mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
-    cp "$WORK_DIR/tarball/icons/claude-desktop.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/"
+if [ -d "$WORK_DIR/tarball/icons/hicolor" ]; then
+    mkdir -p "$APPDIR/usr/share/icons"
+    cp -a "$WORK_DIR/tarball/icons/hicolor" "$APPDIR/usr/share/icons/"
+    # AppImage looks for the app icon at the AppDir root as well.
+    cp "$WORK_DIR/tarball/icons/hicolor/256x256/apps/claude-desktop.png" "$APPDIR/claude-desktop.png"
 else
     log_warn "Icon not found in tarball"
 fi

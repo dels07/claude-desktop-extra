@@ -1,0 +1,317 @@
+# Builds the amd64 tarball twice on separate runners from one GPG-verified
+# official .deb, fails unless the two are byte-identical, and publishes a
+# build-provenance attestation for the artifact. The Computer Use bridges are
+# built once at a pinned commit and handed to both legs, so what is probed is
+# the complete package, not a bridge-less variant.
+---
+name: Reproducibility Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - scripts/build-patched-tarball.sh
+      - .github/workflows/repro-probe.yml
+concurrency: { group: "repro-probe-${{ github.ref }}", cancel-in-progress: true }
+permissions: { contents: read }
+env: { arch: amd64 }
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs: { bridges: "${{ steps.list.outputs.bridges }}" }
+    steps:
+      - name: List the bridges
+        id: list
+        run: |
+          bridges="$(jq -c . <<'JSON'
+          [
+            {"repo": "gnome-bridge",       "bin": "gnome-portal-bridge", "target": "x86_64-unknown-linux-gnu",  "apt": "libpipewire-0.3-dev"},
+            {"repo": "kwin-portal-bridge", "bin": "kwin-portal-bridge",  "target": "x86_64-unknown-linux-gnu",  "apt": "libxkbcommon-dev libpipewire-0.3-dev"},
+            {"repo": "wlroots-bridge",     "bin": "wlroots-bridge",      "target": "x86_64-unknown-linux-musl", "apt": ""},
+            {"repo": "x11-bridge",         "bin": "x11-bridge",          "target": "x86_64-unknown-linux-musl", "apt": ""}
+          ]
+          JSON
+          )"
+          echo "bridges=${bridges}" >> "${GITHUB_OUTPUT}"
+          echo "${bridges}"
+
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with: { persist-credentials: false }
+
+      - name: Download & GPG/SHA-verify official ${{ env.arch }} .deb
+        run: bash .github/scripts/apt-fetch-verify.sh download "${arch}" deb-input; ls -la deb-input/
+
+      - name: Upload verified .deb
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-deb
+          path: deb-input/claude-desktop_*_${{ env.arch }}.deb
+          retention-days: 1
+          compression-level: 0
+
+  bridges:
+    runs-on: ubuntu-24.04 # Pinned to 24.04. The gnu-target bridges must link glibc <= 2.39.
+    timeout-minutes: 30
+    needs: setup
+    strategy: { fail-fast: false, matrix: { include: "${{ fromJSON(needs.setup.outputs.bridges) }}" } }
+    steps:
+      - name: Resolve revision
+        id: rev
+        env: { REPO: "${{ matrix.repo }}" }
+        run: |
+          sha="$(git ls-remote "https://github.com/patrickjaja/${REPO}.git" HEAD | cut -f1)"
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "${REPO} ${sha}"
+
+      - name: Cache
+        id: cache
+        uses: actions/cache@v6
+        with: { path: bin, key: "bridge-${{ matrix.bin }}-${{ matrix.target }}-${{ steps.rev.outputs.sha }}" }
+
+      - name: Install build deps
+        if: steps.cache.outputs.cache-hit != 'true' && matrix.apt != ''
+        env: { APT: "${{ matrix.apt }}" }
+        run: |
+          read -ra pkgs <<<"${APT}"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config clang cmake "${pkgs[@]}"
+
+      - name: Checkout bridge source
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: patrickjaja/${{ matrix.repo }}
+          ref: ${{ steps.rev.outputs.sha }}
+          path: src
+          persist-credentials: false
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        env: { CARGO_BUILD_TARGET: "${{ matrix.target }}" }
+        run: |
+          rustup target add "${CARGO_BUILD_TARGET}"
+          cargo install --path src --root . --locked --no-track
+
+      - name: Verify
+        env: { BIN: "${{ matrix.bin }}", TARGET: "${{ matrix.target }}" }
+        run: |
+          file "bin/${BIN}"
+          case "${TARGET}" in
+            *-musl)
+              file "bin/${BIN}" | grep -Eq 'statically linked|static-pie' || {
+                echo "::error::${BIN} is not statically linked"
+                exit 1
+              }
+              ;;
+            *)
+              floor="$(objdump -T "bin/${BIN}" | grep -oP 'GLIBC_[0-9.]+' | sort -uV | tail -1)"
+              echo "${BIN} max glibc: ${floor}"
+              highest="$(printf '%s\nGLIBC_2.39\n' "${floor}" | sort -V | tail -1)"
+              [[ "${highest}" == "GLIBC_2.39" ]] || {
+                echo "::error::${BIN} needs ${floor}, above the 2.39 floor"
+                exit 1
+              }
+              ;;
+          esac
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-${{ matrix.bin }}
+          path: bin/${{ matrix.bin }}
+          retention-days: 1
+
+  build:
+    needs: [setup, prepare, bridges]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env: { input: build-input }
+    strategy: { fail-fast: false, matrix: { leg: [a, b] } }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with: { persist-credentials: false }
+
+      - name: Download verified .deb
+        uses: actions/download-artifact@v8
+        with: { name: verified-deb, path: deb-input }
+
+      - name: Build toolchain image
+        run: |
+          cat > Dockerfile.repro <<'DOCKERFILE'
+          FROM archlinux:base-devel
+          RUN pacman -Syu --noconfirm && \
+              pacman -S --noconfirm python nodejs npm git imagemagick shellcheck \
+                                    nim nimble binutils tar zstd xz gnupg asar \
+                                    desktop-file-utils
+          RUN nimble install -y regex && \
+              printf 'import regex\ndiscard re2"a"\n' > /tmp/probe.nim && \
+              nim c --hints:off -o:/tmp/probe /tmp/probe.nim && rm /tmp/probe /tmp/probe.nim
+          DOCKERFILE
+          docker build -f Dockerfile.repro -t claude-repro:local .
+
+      - name: Download bridges
+        uses: actions/download-artifact@v8
+        with: { pattern: bridge-*, merge-multiple: true, path: "${{ env.input }}" }
+
+      - name: Build
+        env: { BRIDGES: "${{ needs.setup.outputs.bridges }}" }
+        run: |
+          mkdir -p out
+          cp "deb-input/claude-desktop_"*"_${arch}.deb" "${input}/claude.deb"
+          cp -r scripts patches js packaging PKGBUILD.template "${input}/"
+          chmod +x "${input}/"*"-bridge"
+
+          bins="$(jq -r '.[].bin' <<<"${BRIDGES}")"
+          bridge_env=()
+          while read -r bin; do
+            [[ -f "${input}/${bin}" ]] || { echo "::error::bridge ${bin} is missing"; exit 1; }
+            var="${bin^^}"
+            bridge_env+=(-e "${var//-/_}_BIN=/input/${bin}")
+          done <<<"${bins}"
+
+          docker run --rm \
+            -v "${PWD}/${input}:/input:ro" \
+            -v "${PWD}/out:/output" \
+            -e CLAUDE_GPG_VERIFY=0 \
+            -e SKIP_SMOKE_TEST=1 \
+            "${bridge_env[@]}" \
+            claude-repro:local \
+            bash /input/scripts/build-patched-tarball.sh /input/claude.deb /output
+          cat out/build-info.txt
+
+      - name: Upload build-info
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-info-${{ matrix.leg }}
+          path: out/build-info.txt
+          retention-days: 7
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: tarball-${{ matrix.leg }}
+          path: out/claude-desktop-*-linux.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  compare:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Download build-info
+        uses: actions/download-artifact@v8
+        with: { pattern: build-info-*, path: info }
+
+      - name: Download tarballs
+        uses: actions/download-artifact@v8
+        with: { pattern: tarball-*, path: out }
+
+      - name: Compare
+        id: compare
+        run: |
+          for leg in a b; do
+            while IFS='=' read -r k v; do
+              printf -v "${leg^^}_${k}" '%s' "${v//\"/}"
+            done < "info/build-info-${leg}/build-info.txt"
+          done
+
+          cat <<-EOF | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
+          	version=${A_VERSION}
+          	sha_a=${A_SHA256}
+          	sha_b=${B_SHA256}
+          	tar_sha_a=${A_TAR_SHA256}
+          	tar_sha_b=${B_TAR_SHA256}
+          EOF
+
+          cat <<-EOF
+          	epoch A: ${A_SOURCE_DATE_EPOCH}
+          	epoch B: ${B_SOURCE_DATE_EPOCH}
+          	gz    A: ${A_SHA256}
+          	gz    B: ${B_SHA256}
+          	tar   A: ${A_TAR_SHA256}
+          	tar   B: ${B_TAR_SHA256}
+          EOF
+
+          if [[ "${A_SHA256}" == "${B_SHA256}" ]]; then
+            echo "reproducible=true" | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
+            echo "REPRODUCIBLE: .tar.gz hashes match"
+          else
+            echo "reproducible=false" | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
+            echo "::warning::.tar.gz hashes DIFFER"
+          fi
+
+          if [[ "${A_TAR_SHA256}" == "${B_TAR_SHA256}" ]]; then
+            echo "tar_reproducible=true" | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
+            echo "REPRODUCIBLE: uncompressed tar hashes match"
+          else
+            echo "tar_reproducible=false" | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
+            echo "::warning::uncompressed tar hashes DIFFER — divergence is in the tree, not the compressor"
+          fi
+
+      - name: Diff the two trees
+        if: steps.compare.outputs.reproducible == 'false'
+        run: |
+          for leg in a b; do
+            mkdir -p "cmp/${leg}"
+            tar -xzf "out/tarball-${leg}/claude-desktop-"*"-linux.tar.gz" -C "cmp/${leg}"
+          done
+          diff_out="$(diff -rq cmp/a cmp/b 2>&1 | tee tree-diff.txt)"
+          lines="$(wc -l < tree-diff.txt)"
+          printf '::group::%s differing files\n%s\n::endgroup::\n' "${lines}" "${diff_out}"
+
+      - name: Upload tree diff
+        if: steps.compare.outputs.reproducible == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tree-diff
+          path: tree-diff.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Attest build provenance
+        if: steps.compare.outputs.reproducible == 'true'
+        id: attest
+        uses: actions/attest-build-provenance@v4
+        with: { subject-path: out/tarball-a/claude-desktop-*-linux.tar.gz }
+
+      - name: Summarize
+        env:
+          ATTESTATION_URL: ${{ steps.attest.outputs['attestation-url'] }}
+        run: |
+          if [[ "${reproducible}" == "true" && "${tar_reproducible}" == "true" ]]; then
+            table="$(printf '%s\n' \
+              "| layer   | sha256 (A ∪ B)   |" \
+              "| ------- | ---------------- |" \
+              "| .tar.gz | \`${sha_a}\`     |" \
+              "| .tar    | \`${tar_sha_a}\` |")"
+          else
+            table="$(printf '%s\n' \
+              "| layer   | build A          | build B          | match               |" \
+              "| ------- | ---------------- | ---------------- | ------------------- |" \
+              "| .tar.gz | \`${sha_a}\`     | \`${sha_b}\`     | ${reproducible}     |" \
+              "| .tar    | \`${tar_sha_a}\` | \`${tar_sha_b}\` | ${tar_reproducible} |")"
+          fi
+
+          cat <<EOF >> "${GITHUB_STEP_SUMMARY}"
+          Two builds of Claude Desktop ${version} (${arch}) on separate runners from one GPG-verified upstream .deb.
+
+          ${table}
+
+          Attestation: ${ATTESTATION_URL:-none (builds were not byte-identical)}
+          EOF
+
+      - name: Fail if not reproducible
+        if: steps.compare.outputs.reproducible == 'false'
+        run: echo "::error::Builds are not byte-identical; see the tree-diff artifact." && exit 1

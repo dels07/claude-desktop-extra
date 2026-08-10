@@ -14,6 +14,12 @@ The dom-ready injection gates for Diff views and Panel tabs matched `claude.ai`/
 
 The official .deb ships the app icon at 16, 32, 48, 128 and 256 px, but the tarball carried only the 256 px one, so panels, window lists and notifications downscaled it. The tarball now mirrors the .deb's hicolor tree, and every package format (pacman, deb, rpm, AppImage, Nix) installs all five sizes.
 
+### CI: a reproducibility probe, parallel tarball builds, and asar from the Arch repos (#222, #223)
+
+A new `repro-probe` workflow builds the amd64 tarball twice on separate runners from one GPG-verified official .deb, fails unless the two are byte-identical, and publishes a GitHub build-provenance attestation for the probe's artifact when they match. It runs on manual dispatch and on pushes touching the tarball script, so it stays out of normal CI.
+
+The release pipeline now builds the Computer Use bridges in their own job and fans both tarball builds out from it, so amd64 and aarch64 build concurrently (about five minutes off a release run). All GitHub Actions moved to their current majors. The build containers install `asar` from the Arch `extra` repo instead of cloning and building yay from the AUR - one unpinned fetch removed from the release supply chain, and several minutes off each container run.
+
 ### Two builds of the same .deb produce the same tarball, byte for byte (#221)
 
 Entry order, mtimes, ownership, the gzip header and the pigz-or-gzip compressor lottery all leaked build-host state into the tarball, so a published artifact could not be checked against a local rebuild. tar now sorts entries, pins mtimes to the .deb's own timestamps (`SOURCE_DATE_EPOCH`) and zeroes ownership; compression is pinned to gzip with `-n` (`CLAUDE_ALLOW_PIGZ=1` opts local builds back into pigz for speed, at the cost of byte-identical output). `build-info.txt` gains `TAR_SHA256` and `SOURCE_DATE_EPOCH`, so a hash mismatch between two builds can be pinned on either the tree or the compressor. The uncompressed tar layer is deterministic outright; the `.gz` is byte-identical when built with the same gzip version.

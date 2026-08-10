@@ -26,10 +26,10 @@ jobs:
         run: |
           bridges="$(jq -c . <<'JSON'
           [
-            {"repo": "gnome-bridge",       "bin": "gnome-portal-bridge", "target": "x86_64-unknown-linux-gnu",  "apt": "libpipewire-0.3-dev"},
-            {"repo": "kwin-portal-bridge", "bin": "kwin-portal-bridge",  "target": "x86_64-unknown-linux-gnu",  "apt": "libxkbcommon-dev libpipewire-0.3-dev"},
-            {"repo": "wlroots-bridge",     "bin": "wlroots-bridge",      "target": "x86_64-unknown-linux-musl", "apt": ""},
-            {"repo": "x11-bridge",         "bin": "x11-bridge",          "target": "x86_64-unknown-linux-musl", "apt": ""}
+            {"repo": "gnome-bridge",       "bin": "gnome-portal-bridge", "target": "x86_64-unknown-linux-gnu",  "apt": "libpipewire-0.3-dev",                  "reldir": "gnome-bridge-output"},
+            {"repo": "kwin-portal-bridge", "bin": "kwin-portal-bridge",  "target": "x86_64-unknown-linux-gnu",  "apt": "libxkbcommon-dev libpipewire-0.3-dev", "reldir": "bridge-output"},
+            {"repo": "wlroots-bridge",     "bin": "wlroots-bridge",      "target": "x86_64-unknown-linux-musl", "apt": "",                                     "reldir": "wlroots-bridge-output"},
+            {"repo": "x11-bridge",         "bin": "x11-bridge",          "target": "x86_64-unknown-linux-musl", "apt": "",                                     "reldir": "x11-bridge-output"}
           ]
           JSON
           )"
@@ -69,13 +69,28 @@ jobs:
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
           echo "${REPO} ${sha}"
 
+      # Same key + path as build-and-release.yml's bridge caches, restore-only:
+      # a hit gives the probe the release's exact binaries, so the digest comparison can match.
+      - name: Restore release-built binaries
+        id: relcache
+        uses: actions/cache/restore@v6
+        with:
+          path: /tmp/${{ matrix.reldir }}
+          key: ${{ matrix.bin }}-${{ steps.rev.outputs.sha }}
+
+      - name: Adopt release binaries
+        if: steps.relcache.outputs.cache-hit == 'true'
+        env: { BIN: "${{ matrix.bin }}", RELDIR: "${{ matrix.reldir }}" }
+        run: mkdir -p bin && cp "/tmp/${RELDIR}/${BIN}" bin/
+
       - name: Cache
         id: cache
+        if: steps.relcache.outputs.cache-hit != 'true'
         uses: actions/cache@v6
         with: { path: bin, key: "bridge-${{ matrix.bin }}-${{ matrix.target }}-${{ steps.rev.outputs.sha }}" }
 
       - name: Install build deps
-        if: steps.cache.outputs.cache-hit != 'true' && matrix.apt != ''
+        if: ${{ !contains(steps.*.outputs.cache-hit, 'true') && matrix.apt != '' }}
         env: { APT: "${{ matrix.apt }}" }
         run: |
           read -ra pkgs <<<"${APT}"
@@ -83,7 +98,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends pkg-config clang cmake "${pkgs[@]}"
 
       - name: Checkout bridge source
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: ${{ !contains(steps.*.outputs.cache-hit, 'true') }}
         uses: actions/checkout@v7
         with:
           repository: patrickjaja/${{ matrix.repo }}
@@ -92,7 +107,7 @@ jobs:
           persist-credentials: false
 
       - name: Build
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: ${{ !contains(steps.*.outputs.cache-hit, 'true') }}
         env: { CARGO_BUILD_TARGET: "${{ matrix.target }}" }
         run: |
           rustup target add "${CARGO_BUILD_TARGET}"
@@ -259,6 +274,33 @@ jobs:
             echo "tar_reproducible=false" | tee -a "${GITHUB_OUTPUT}" >> "${GITHUB_ENV}"
             echo "::warning::uncompressed tar hashes DIFFER — divergence is in the tree, not the compressor"
           fi
+
+      # A release asset's sha256 and its attestation use the same hash, so equal digests mean one attestation covers both files.
+      # A mismatch is normal: master moved on, another .deb, or self-built bridges.
+      - name: Compare with the latest release asset
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          asset="claude-desktop-${version}-linux.tar.gz"
+          digest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            --jq ".assets[] | select(.name == \"${asset}\") | .digest" || true)"
+          rel="${digest#sha256:}"
+
+          case "${rel}" in
+            "" | null)  verdict="No ${asset} with a digest on the latest release; nothing to compare." ;;
+            "${sha_a}") verdict="MATCH: the probe reproduced the shipped artifact byte for byte." ;;
+            *)          verdict="No match; expected when master moved past the release, the .deb version differs, or the bridges were rebuilt rather than restored from the release cache." ;;
+          esac
+
+          cat <<-EOF >> "${GITHUB_STEP_SUMMARY}"
+          	## Release digest comparison
+
+          	| build   | sha256          |
+          	| ------- | --------------- |
+          	| probe   | \`${sha_a}\`    |
+          	| release | \`${rel:-n/a}\` |
+
+          	${verdict}
+          	EOF
 
       - name: Diff the two trees
         if: steps.compare.outputs.reproducible == 'false'

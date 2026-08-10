@@ -94,7 +94,7 @@ jobs:
       should_build: ${{ steps.decide.outputs.should_build }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Full history for git changelog generation
 
@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload amd64 .deb for build job
         if: steps.decide.outputs.should_build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-deb-amd64
           path: |
@@ -300,7 +300,7 @@ jobs:
 
       - name: Upload arm64 .deb for build job
         if: steps.decide.outputs.should_build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-deb-arm64
           path: |
@@ -317,7 +317,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run shellcheck on all scripts
         run: |
@@ -422,10 +422,10 @@ jobs:
       tarball_sha256: ${{ steps.build.outputs.tarball_sha256 }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download amd64 .deb artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: claude-deb-amd64
           path: deb-input
@@ -439,7 +439,7 @@ jobs:
 
       - name: Cache kwin-portal-bridge binaries
         id: bridge-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/bridge-output
           key: kwin-portal-bridge-${{ steps.bridge-rev.outputs.sha }}
@@ -573,7 +573,7 @@ jobs:
 
       - name: Cache x11-bridge binaries
         id: x11-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/x11-bridge-output
           key: x11-bridge-${{ steps.x11-rev.outputs.sha }}
@@ -658,7 +658,7 @@ jobs:
 
       - name: Cache wlroots-bridge binaries
         id: wlroots-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/wlroots-bridge-output
           key: wlroots-bridge-${{ steps.wlroots-rev.outputs.sha }}
@@ -738,7 +738,7 @@ jobs:
 
       - name: Cache gnome-portal-bridge binaries
         id: gnome-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/gnome-bridge-output
           key: gnome-portal-bridge-${{ steps.gnome-rev.outputs.sha }}
@@ -957,35 +957,35 @@ jobs:
           echo "  SHA256:   ${SHA256}"
 
       - name: Upload tarball artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tarball
           path: /tmp/build-output/claude-desktop-*-linux.tar.gz
           retention-days: 1
 
       - name: Upload kwin-portal-bridge aarch64 binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kwin-portal-bridge-aarch64
           path: /tmp/bridge-output/kwin-portal-bridge-aarch64
           retention-days: 1
 
       - name: Upload x11-bridge aarch64 binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: x11-bridge-aarch64
           path: /tmp/x11-bridge-output/x11-bridge-aarch64
           retention-days: 1
 
       - name: Upload wlroots-bridge aarch64 binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wlroots-bridge-aarch64
           path: /tmp/wlroots-bridge-output/wlroots-bridge-aarch64
           retention-days: 1
 
       - name: Upload gnome-portal-bridge aarch64 binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gnome-portal-bridge-aarch64
           path: /tmp/gnome-bridge-output/gnome-portal-bridge-aarch64
@@ -993,7 +993,7 @@ jobs:
 
       - name: Upload Build Log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-log
           path: build-output.log
@@ -1017,31 +1017,31 @@ jobs:
       tarball_aarch64_sha256: ${{ steps.build.outputs.tarball_aarch64_sha256 }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download arm64 .deb artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: claude-deb-arm64
           path: deb-input
 
       - name: Download kwin-portal-bridge aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: kwin-portal-bridge-aarch64
 
       - name: Download x11-bridge aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: x11-bridge-aarch64
 
       - name: Download wlroots-bridge aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wlroots-bridge-aarch64
 
       - name: Download gnome-portal-bridge aarch64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gnome-portal-bridge-aarch64
 
@@ -1116,7 +1116,7 @@ jobs:
           echo "Built aarch64 tarball: $(basename "$TARBALL") (arch=${ARCH:-arm64}, SHA256: ${SHA256})"
 
       - name: Upload aarch64 tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tarball-aarch64
           path: claude-desktop-*-linux-aarch64.tar.gz
@@ -1134,19 +1134,19 @@ jobs:
         arch: [x86_64, aarch64]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # amd64 -> `tarball`; aarch64 -> `tarball-aarch64` (already built from the
       # official arm64 .deb, with arm64 Electron + kwin-portal-bridge baked in).
       - name: Download x86_64 tarball
         if: matrix.arch == 'x86_64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball
 
       - name: Download aarch64 tarball
         if: matrix.arch == 'aarch64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball-aarch64
 
@@ -1213,7 +1213,7 @@ jobs:
           fi
 
       - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: appimage-${{ matrix.arch }}
           path: |
@@ -1233,19 +1233,19 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # amd64 -> `tarball`; arm64 -> `tarball-aarch64` (official arm64 .deb,
       # arm64 Electron + kwin-portal-bridge already bundled).
       - name: Download amd64 tarball
         if: matrix.arch == 'amd64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball
 
       - name: Download arm64 tarball
         if: matrix.arch == 'arm64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball-aarch64
 
@@ -1256,7 +1256,7 @@ jobs:
       # below (not to build it — the tarball already carries arm64 binaries).
       - name: Set up QEMU for ARM64
         if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
@@ -1348,7 +1348,7 @@ jobs:
           fi
 
       - name: Upload Debian package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-${{ matrix.arch }}
           path: dist/claude-desktop-extra_*_${{ matrix.arch }}.deb
@@ -1360,7 +1360,7 @@ jobs:
       # Retire this step with the rename transition window.
       - name: Upload transitional deb artifact (amd64 build only)
         if: matrix.arch == 'amd64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-transitional
           path: dist/claude-desktop-bin_*_all.deb
@@ -1379,19 +1379,19 @@ jobs:
         arch: [x86_64, aarch64]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # x86_64 -> `tarball`; aarch64 -> `tarball-aarch64` (official arm64 .deb,
       # arm64 Electron + kwin-portal-bridge already bundled).
       - name: Download x86_64 tarball
         if: matrix.arch == 'x86_64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball
 
       - name: Download aarch64 tarball
         if: matrix.arch == 'aarch64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball-aarch64
 
@@ -1399,7 +1399,7 @@ jobs:
       # step below (not to build it — the tarball already carries arm64 binaries).
       - name: Set up QEMU for ARM64
         if: matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
@@ -1472,7 +1472,7 @@ jobs:
           fi
 
       - name: Upload RPM package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rpm-${{ matrix.arch }}
           path: dist/claude-desktop-extra-*.${{ matrix.arch }}.rpm
@@ -1489,15 +1489,15 @@ jobs:
       nix_hash: ${{ steps.nix-build.outputs.nix_hash }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
 
       - name: Build with Nix
         id: nix-build
@@ -1529,7 +1529,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Generate PKGBUILD
         env:
@@ -1598,7 +1598,7 @@ jobs:
           cat .SRCINFO
 
       - name: Upload PKGBUILD artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pkgbuild
           # The .install file is referenced by PKGBUILD's `install=` field and
@@ -1641,24 +1641,24 @@ jobs:
         arch: [x86_64, aarch64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # x86_64 -> `tarball`; aarch64 -> `tarball-aarch64` (official arm64 .deb,
       # arm64 Electron + kwin-portal-bridge already bundled).
       - name: Download x86_64 tarball
         if: matrix.arch == 'x86_64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball
 
       - name: Download aarch64 tarball
         if: matrix.arch == 'aarch64'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tarball-aarch64
 
       - name: Download PKGBUILD
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: pkgbuild
 
@@ -1856,7 +1856,7 @@ jobs:
             '
 
       - name: Upload Arch package (${{ matrix.arch }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: arch-package-${{ matrix.arch }}
           path: dist/claude-desktop-extra-*-${{ matrix.arch }}.pkg.tar.zst
@@ -1881,7 +1881,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -1928,7 +1928,7 @@ jobs:
           exit 1
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -2153,7 +2153,7 @@ jobs:
           RPM_X86_SHA: ${{ steps.files.outputs.rpm_x86_64_sha256 }}
           RPM_ARM_SHA: ${{ steps.files.outputs.rpm_aarch64_sha256 }}
           REPO: ${{ github.repository }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-version.outputs.tag }}
           name: ${{ needs.check-version.outputs.release_name }}
@@ -2421,7 +2421,7 @@ jobs:
           tar -czf /tmp/gh-pages-content.tar.gz -C "$REPO_DIR" .
 
       - name: Upload gh-pages content
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gh-pages-content
           path: /tmp/gh-pages-content.tar.gz
@@ -2631,20 +2631,20 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install RPM tooling
         run: dnf install -y rpm-sign createrepo_c gnupg2
 
       - name: Download RPM artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: rpm-*
           path: rpm-files/
           merge-multiple: true
 
       - name: Download gh-pages content from release job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: gh-pages-content
           path: /tmp/
@@ -2683,7 +2683,7 @@ jobs:
           done
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: /tmp/gh-pages-repo
 
@@ -2703,7 +2703,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # ================================================================
   # Job 6b: LEGACY MIRROR (retire with the rename transition window)
@@ -2741,12 +2741,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (latest master with updated hash)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: master
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
 
       - name: Build with real fetchurl from GitHub Releases
         run: |
@@ -2773,7 +2773,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

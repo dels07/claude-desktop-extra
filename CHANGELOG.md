@@ -2,6 +2,22 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-10
+
+All three changes in this entry were contributed by Kaj Kowalski ([@kjanat](https://github.com/kjanat)) - thank you!
+
+### Page-injection gates match hostnames, not substrings (#219)
+
+The dom-ready injection gates for Diff views and Panel tabs matched `claude.ai`/`claude.com` anywhere in the URL string, so a foreign page with `?x=claude.ai` in its query also received the (inert) page script - flagged by CodeQL. Both gates now parse the URL: Diff views reuses its own strict origin allowlist, Panel tabs compares the parsed hostname and keeps any claude.ai/claude.com subdomain. The DOM test harnesses also share one HTML entity decoder now, decoding `&amp;` last - three of them previously decoded it first, which turned a literal `&lt;` in a test result into `<`.
+
+### Panels get the icon size made for them (#220)
+
+The official .deb ships the app icon at 16, 32, 48, 128 and 256 px, but the tarball carried only the 256 px one, so panels, window lists and notifications downscaled it. The tarball now mirrors the .deb's hicolor tree, and every package format (pacman, deb, rpm, AppImage, Nix) installs all five sizes.
+
+### Two builds of the same .deb produce the same tarball, byte for byte (#221)
+
+Entry order, mtimes, ownership, the gzip header and the pigz-or-gzip compressor lottery all leaked build-host state into the tarball, so a published artifact could not be checked against a local rebuild. tar now sorts entries, pins mtimes to the .deb's own timestamps (`SOURCE_DATE_EPOCH`) and zeroes ownership; compression is pinned to gzip with `-n` (`CLAUDE_ALLOW_PIGZ=1` opts local builds back into pigz for speed, at the cost of byte-identical output). `build-info.txt` gains `TAR_SHA256` and `SOURCE_DATE_EPOCH`, so a hash mismatch between two builds can be pinned on either the tree or the compressor. The uncompressed tar layer is deterministic outright; the `.gz` is byte-identical when built with the same gzip version.
+
 ## 2026-08-08
 
 ### Claude Desktop v1.26832.0 - upstream switched its minifier, 31 of 45 patches re-anchored

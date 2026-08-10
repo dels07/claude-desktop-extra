@@ -519,15 +519,27 @@ else
     log_warn "desktop-file-validate not installed — skipping .desktop validation"
 fi
 
-# Icon: the .deb ships pre-rendered PNGs under usr/share/icons/hicolor/. Use the
-# 256x256 one directly (no ImageMagick resize needed).
-ICON_SRC="$DATA_DIR/usr/share/icons/hicolor/256x256/apps/claude-desktop.png"
-ICON_DST="$TARBALL_DIR/icons/claude-desktop.png"
-if [ -f "$ICON_SRC" ]; then
-    cp "$ICON_SRC" "$ICON_DST"
+# Icons: the .deb ships pre-rendered PNGs at every size under
+# usr/share/icons/hicolor/. Mirror that tree into icons/hicolor/ so each
+# packager installs all of them; a panel asking for 16x16 gets the file made
+# for it instead of a downscaled 256x256.
+HICOLOR_SRC="$DATA_DIR/usr/share/icons/hicolor"
+ICON_DST="$TARBALL_DIR/icons/hicolor/256x256/apps/claude-desktop.png"
+ICON_COUNT=0
+if [ -d "$HICOLOR_SRC" ]; then
+    while IFS= read -r icon_src; do
+        icon_dst="$TARBALL_DIR/icons/hicolor/${icon_src#"$HICOLOR_SRC"/}"
+        mkdir -p "$(dirname "$icon_dst")"
+        cp "$icon_src" "$icon_dst"
+        ICON_COUNT=$((ICON_COUNT + 1))
+    done < <(find "$HICOLOR_SRC" -type f -name 'claude-desktop.png' | sort)
+fi
+if [ "$ICON_COUNT" -gt 0 ]; then
+    log_info "Bundled $ICON_COUNT icon size(s) from the .deb"
 else
     # Fallback: resources/icon.png (large), resized if ImageMagick is present.
     ICON_FALLBACK="$RES_DIR/icon.png"
+    mkdir -p "$(dirname "$ICON_DST")"
     if [ -f "$ICON_FALLBACK" ] && command -v magick &>/dev/null; then
         magick "$ICON_FALLBACK" -resize 256x256 "$ICON_DST"
     elif [ -f "$ICON_FALLBACK" ] && command -v convert &>/dev/null; then

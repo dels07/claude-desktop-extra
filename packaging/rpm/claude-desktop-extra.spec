@@ -173,11 +173,10 @@ Name=New Claude Code session
 Exec=claude-desktop claude://code/new
 DESKTOP
 
-# Install icon
-mkdir -p %{buildroot}/usr/share/icons/hicolor/256x256/apps
-if [ -f tarball/icons/claude-desktop.png ]; then
-    cp tarball/icons/claude-desktop.png \
-        %{buildroot}/usr/share/icons/hicolor/256x256/apps/claude-desktop.png
+# Install every icon size the tarball carries
+mkdir -p %{buildroot}/usr/share/icons
+if [ -d tarball/icons/hicolor ]; then
+    cp -a tarball/icons/hicolor %{buildroot}/usr/share/icons/
 fi
 
 %post
@@ -248,4 +247,4 @@ fi
 /usr/lib/claude-desktop/
 /usr/bin/claude-desktop
 /usr/share/applications/com.anthropic.Claude.desktop
-/usr/share/icons/hicolor/256x256/apps/claude-desktop.png
+/usr/share/icons/hicolor/*/apps/claude-desktop.png

@@ -36,6 +36,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unescapeHtml } from "../lib/unescape-html.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SRC = (f) => readFileSync(join(ROOT, "js/" + f), "utf8");
@@ -366,8 +367,7 @@ function run(html, name, budgetMs) {
       "--virtual-time-budget=" + (budgetMs || 2000), "--dump-dom", "file://" + file], { encoding: "utf8" });
     const m = dom.match(/<pre id="__result">([\s\S]*?)<\/pre>/);
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
-    return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+    return JSON.parse(unescapeHtml(m[1]));
   } finally { if (!KEEP) rmSync(dir, { recursive: true, force: true }); }
 }
 

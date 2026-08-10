@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { unescapeHtml } from "./unescape-html.mjs";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 export const SKIP_EXIT = 3;
@@ -148,10 +149,7 @@ export function dumpDom(chromium, pagePath, extraArgs = []) {
 export function readProbe(dom, id) {
   const m = new RegExp('<pre id="' + id + '"[^>]*>([\\s\\S]*?)</pre>').exec(dom);
   if (!m) return null;
-  return m[1]
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">").replace(/&amp;/g, "&")
-    .trim().split("\n");
+  return unescapeHtml(m[1]).trim().split("\n");
 }
 
 /** Console reporter shared by all three suites. */

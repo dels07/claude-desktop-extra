@@ -46,6 +46,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unescapeHtml } from "../lib/unescape-html.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const EXPAND_JS = readFileSync(join(ROOT, "js/diff_views_expand.js"), "utf8");
@@ -887,7 +888,7 @@ for (const [name, fx, run, font] of scenarios) {
     continue;
   }
   const lines = m[1].split("\n").filter(Boolean)
-    .map((l) => l.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+    .map(unescapeHtml);
   let n = 0;
   let s = 0;
   for (const line of lines) {

@@ -35,6 +35,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unescapeHtml } from "../lib/unescape-html.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const PAGE_JS = readFileSync(join(ROOT, "js/extra_settings_page.js"), "utf8");
@@ -1376,7 +1377,7 @@ for (const [name, fixture] of scenarios) {
     fail++;
     continue;
   }
-  const lines = m[1].split("\n").filter(Boolean).map((l) => l.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+  const lines = m[1].split("\n").filter(Boolean).map(unescapeHtml);
   let n = 0;
   for (const line of lines) {
     if (line.startsWith("PASS")) { pass++; n++; continue; }

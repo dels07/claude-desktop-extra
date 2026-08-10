@@ -209,18 +209,23 @@
   // no bridge present the page degrades silently (no throw, no warn spam,
   // feature off) - this handler is what makes it live at all.
   //
-  // The URL test here is a plain substring check, same posture as the sibling
-  // diff-views injection site: it only decides whether to bother running
-  // executeJavaScript on this webContents, it is NOT a security boundary (the
-  // page script itself does nothing sensitive - it only defines globals and
-  // polls state(), which re-validates the sender origin strictly, above). A
-  // false-positive match here would at most waste one executeJavaScript call
-  // on an unrelated page.
+  // The URL test here only decides whether to bother running executeJavaScript
+  // on this webContents, it is NOT a security boundary (the page script itself
+  // does nothing sensitive - it only defines globals and polls state(), which
+  // re-validates the sender origin strictly, above). It is looser than
+  // ALLOWED_ORIGINS on purpose: any claude.ai/claude.com subdomain gets the
+  // injection, so an upstream move to another subdomain does not kill the bar.
+  function injectHost(rawUrl) {
+    var host;
+    try { host = new _URL(String(rawUrl)).hostname; } catch (e) { return false; }
+    return host === "claude.ai" || host.endsWith(".claude.ai") ||
+      host === "claude.com" || host.endsWith(".claude.com");
+  }
   _app.on("web-contents-created", function (_ev, wc) {
     wc.on("dom-ready", function () {
       try {
         var url = (wc.getURL && wc.getURL()) || "";
-        if (url.indexOf("claude.ai") !== -1 || url.indexOf("claude.com") !== -1) {
+        if (injectHost(url)) {
           wc.executeJavaScript(PAGE_SRC).catch(function () {});
         }
       } catch (e) {}

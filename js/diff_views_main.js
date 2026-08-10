@@ -2430,7 +2430,7 @@
     wc.on("dom-ready", function () {
       try {
         var url = wc.getURL() || "";
-        if (url.indexOf("claude.ai") !== -1 || url.indexOf("claude.com") !== -1) {
+        if (originAllowed(url)) {
           wc.executeJavaScript(PAGE_SRC).catch(function () {});
         }
       } catch (e) {}

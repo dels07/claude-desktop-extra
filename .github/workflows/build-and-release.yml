@@ -43,8 +43,9 @@ concurrency:
 # ──────────────────────────────────────────────────────────────────────
 # Job graph (fan-out / fan-in):
 #
-#   check-version ──► build-tarball         (amd64: ingest official .deb)
-#         │           build-aarch64-tarball (arm64: ingest official arm64 .deb)
+#   check-version ──► build-bridges (Computer Use bridges, both arches, cached)
+#         │                  ├── build-tarball         (amd64: ingest official .deb)
+#         │                  └── build-aarch64-tarball (arm64: ingest official arm64 .deb)
 #         │                  │
 #         │                  ├── package-appimage (matrix: x86_64, aarch64)
 #         │                  ├── package-deb      (matrix: amd64, arm64)
@@ -414,22 +415,18 @@ jobs:
   # ================================================================
   # Job 2: Build the patched tarball (the main bottleneck)
   # ================================================================
-  build-tarball:
+  # ================================================================
+  # Job 2a: Build the Computer Use bridges (both architectures)
+  #
+  # Separate from build-tarball so the amd64 and aarch64 tarball builds can
+  # run in parallel: both only need these binaries (cached on upstream HEAD,
+  # so this job is seconds on a cache hit) and their own .deb artifact.
+  # ================================================================
+  build-bridges:
     needs: check-version
     if: needs.check-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      tarball_sha256: ${{ steps.build.outputs.tarball_sha256 }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Download amd64 .deb artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: claude-deb-amd64
-          path: deb-input
-
       - name: Get kwin-portal-bridge repo HEAD
         id: bridge-rev
         run: |
@@ -857,6 +854,67 @@ jobs:
             echo "::warning::aarch64-linux-gnu-objdump unavailable — could not enforce glibc floor on the arm64 bridge"
           fi
 
+      - name: Upload x86_64 bridge binaries
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridges-x86_64
+          path: |
+            /tmp/bridge-output/kwin-portal-bridge
+            /tmp/x11-bridge-output/x11-bridge
+            /tmp/wlroots-bridge-output/wlroots-bridge
+            /tmp/gnome-bridge-output/gnome-portal-bridge
+          retention-days: 1
+
+      - name: Upload kwin-portal-bridge aarch64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-portal-bridge-aarch64
+          path: /tmp/bridge-output/kwin-portal-bridge-aarch64
+          retention-days: 1
+
+      - name: Upload x11-bridge aarch64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: x11-bridge-aarch64
+          path: /tmp/x11-bridge-output/x11-bridge-aarch64
+          retention-days: 1
+
+      - name: Upload wlroots-bridge aarch64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: wlroots-bridge-aarch64
+          path: /tmp/wlroots-bridge-output/wlroots-bridge-aarch64
+          retention-days: 1
+
+      - name: Upload gnome-portal-bridge aarch64 binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: gnome-portal-bridge-aarch64
+          path: /tmp/gnome-bridge-output/gnome-portal-bridge-aarch64
+          retention-days: 1
+
+  build-tarball:
+    needs: [check-version, build-bridges]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tarball_sha256: ${{ steps.build.outputs.tarball_sha256 }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download amd64 .deb artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: claude-deb-amd64
+          path: deb-input
+
+      - name: Download x86_64 bridge binaries
+        uses: actions/download-artifact@v8
+        with:
+          name: bridges-x86_64
+          path: /tmp
+
       - name: Build Patched Tarball (ingest official amd64 .deb)
         id: build
         run: |
@@ -902,20 +960,10 @@ jobs:
 
               echo '=== Installing build dependencies ==='
               pacman -Syu --noconfirm
-              pacman -S --noconfirm python nodejs npm git imagemagick shellcheck nim nimble binutils tar zstd xz gnupg
+              pacman -S --noconfirm python nodejs npm git imagemagick shellcheck nim nimble binutils tar zstd xz gnupg asar
 
               echo '=== Installing Nim regex package ==='
               nimble install -y regex
-
-              echo '=== Installing asar from AUR ==='
-              useradd -m builder
-              echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
-              cd /tmp
-              git clone https://aur.archlinux.org/yay-bin.git
-              chown -R builder:builder yay-bin
-              cd yay-bin
-              su builder -c 'makepkg -si --noconfirm'
-              su builder -c 'yay -S --noconfirm asar'
 
               echo '=== Running ingest+patch script (build-patched-tarball.sh) ==='
               # Local .deb already SHA-verified in check-version; GPG verify of a
@@ -963,34 +1011,6 @@ jobs:
           path: /tmp/build-output/claude-desktop-*-linux.tar.gz
           retention-days: 1
 
-      - name: Upload kwin-portal-bridge aarch64 binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: kwin-portal-bridge-aarch64
-          path: /tmp/bridge-output/kwin-portal-bridge-aarch64
-          retention-days: 1
-
-      - name: Upload x11-bridge aarch64 binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: x11-bridge-aarch64
-          path: /tmp/x11-bridge-output/x11-bridge-aarch64
-          retention-days: 1
-
-      - name: Upload wlroots-bridge aarch64 binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: wlroots-bridge-aarch64
-          path: /tmp/wlroots-bridge-output/wlroots-bridge-aarch64
-          retention-days: 1
-
-      - name: Upload gnome-portal-bridge aarch64 binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: gnome-portal-bridge-aarch64
-          path: /tmp/gnome-bridge-output/gnome-portal-bridge-aarch64
-          retention-days: 1
-
       - name: Upload Build Log
         if: always()
         uses: actions/upload-artifact@v7
@@ -1010,7 +1030,7 @@ jobs:
   # arch-agnostic JS, so this runs in an amd64 Arch container — no QEMU.
   # ================================================================
   build-aarch64-tarball:
-    needs: [check-version, build-tarball]
+    needs: [check-version, build-bridges]
     if: needs.check-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -1084,16 +1104,8 @@ jobs:
             bash -c "
               set -eo pipefail
               pacman -Syu --noconfirm
-              pacman -S --noconfirm python nodejs npm git imagemagick shellcheck nim nimble binutils tar zstd xz gnupg
+              pacman -S --noconfirm python nodejs npm git imagemagick shellcheck nim nimble binutils tar zstd xz gnupg asar
               nimble install -y regex
-              useradd -m builder
-              echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
-              cd /tmp
-              git clone https://aur.archlinux.org/yay-bin.git
-              chown -R builder:builder yay-bin
-              cd yay-bin
-              su builder -c 'makepkg -si --noconfirm'
-              su builder -c 'yay -S --noconfirm asar'
               # arm64 .deb already SHA-verified in check-version; skip smoke test
               # (arm64 Electron can't run in this amd64 container) + GPG (local file).
               ${BRIDGE_ENV} CLAUDE_GPG_VERIFY=0 SKIP_SMOKE_TEST=1 \

@@ -2,6 +2,12 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-11
+
+### Every release download is attested (#224)
+
+Contributed by Kaj Kowalski ([@kjanat](https://github.com/kjanat)). The release job now publishes a GitHub build-provenance attestation for every release asset - tarballs, .deb, .rpm, AppImage, the pacman packages and repo database - before anything goes live, so `gh attestation verify --owner patrickjaja <file>` works on any download. The step is fail-closed ahead of all publishing: if attestation fails, the release aborts cleanly with every channel still on the previous version. The reproducibility probe now also reuses the release pipeline's own bridge binaries from its cache (restore-only) and prints its digest next to the latest release asset's, so probe and release attestations can cover the very same bytes.
+
 ## 2026-08-10
 
 All three changes in this entry were contributed by Kaj Kowalski ([@kjanat](https://github.com/kjanat)) - thank you!

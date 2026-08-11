@@ -1891,6 +1891,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -2148,6 +2150,15 @@ jobs:
           echo "repo_available=true" >> $GITHUB_OUTPUT
           echo "=== pacman repository assets ==="
           ls -la pacman-repo/
+
+      # Provenance for every release asset: attestations bind to the file's
+      # sha256, so `gh attestation verify --owner <owner> <file>` works on any
+      # downloaded copy. Runs before the release step - nothing is published
+      # unattested.
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release-files/*
 
       - name: Create GitHub Release
         env:

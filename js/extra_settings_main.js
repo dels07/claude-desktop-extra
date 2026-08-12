@@ -364,6 +364,8 @@
       note: "One model id per line, first is the default. Append [1m] for the 1M-token context window." },
     { key: "modelDiscoveryEnabled", kind: "bool", group: "connection", scope: "3p",
       label: "Model discovery", note: "Pull the model list from the provider instead of the list above." },
+    { key: "modelPrefer1mContext", kind: "bool", group: "connection", scope: "3p",
+      label: "Default to 1M context", note: "Prefer the 1M-token context window variant when a model offers one (upstream gates this @next)." },
     { key: "inferenceCredentialKind", kind: "enum", group: "connection", scope: "3p",
       label: "Credential kind",
       options: ["static", "helper-script", "interactive", "vendor-profile", "oauth", "workforce"] },

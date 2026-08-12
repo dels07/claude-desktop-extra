@@ -979,25 +979,29 @@ proc apply*(input: string): string =
 
   # 13b.kwin-shell-hint: desktop shell hint template
   block:
-    # v1.26832.0: the nested win32/Finder branch inside the template's ${...}
-    # switched to backtick literals. The whole matched region is one template
-    # literal passed as an argument, so it can be swapped for a parenthesised
-    # ternary — no outer template wrapper needed, and the branch texts stay
-    # single-level templates where `"` needs no escaping.
+    # v1.28929.0: wording changed ("To click on the desktop, ...") and a second
+    # ${platform===`win32`?...} interpolation was added (click-only caveat).
+    # The whole matched region is one template literal passed as an argument,
+    # so it can be swapped for a parenthesised ternary — no outer template
+    # wrapper needed, and the branch texts stay single-level templates where
+    # `"` needs no escaping.
     let prefix =
-      "`The desktop shell is frontmost. Double-click, right-click, and Enter on desktop items can launch applications outside the allowlist. To interact with the desktop, taskbar, Start menu, Search, or file manager, call request_access with exactly \"${"
+      "`The desktop shell is frontmost. Double-click, right-click, and Enter on desktop items can launch applications outside the allowlist. To click on the desktop, taskbar, Start menu, Search, or file manager, call request_access with exactly \"${"
+    let mid =
+      "===`win32`?`File Explorer`:`Finder`}\" in the apps array \xe2\x80\x94 that single grant covers all of them.${"
     let suffix =
-      "===`win32`?`File Explorer`:`Finder`}\" in the apps array \xe2\x80\x94 that single grant covers all of them. To interact with a different app, use open_application to bring it forward.`"
-    let pat = re(escapeRe(prefix) & "([\\w$]+)" & escapeRe(suffix))
+      "===`win32`?` That grant is click-only: typing into the shell stays blocked.`:``} To interact with a different app, use open_application to bring it forward.`"
+    let pat = re(
+      escapeRe(prefix) & "([\\w$]+)" & escapeRe(mid) & "([\\w$]+)" & escapeRe(suffix)
+    )
     let maybeMatch = content.find(pat)
     if maybeMatch.isSome:
       let m = maybeMatch.get()
-      let platVar = m.captures[0]
-      let newShell =
-        "(globalThis.__cuKwinMode?`The desktop shell is frontmost. Desktop icons, panels, launchers, and widgets belong to Plasma Shell. To interact with them, call request_access with exactly \"plasmashell\" in the apps array. If you need the file manager, request \"Dolphin\" separately. To interact with a different app, use open_application to bring it forward.`:" &
-        prefix & platVar & suffix & ")"
       let bounds = m.matchBounds
       let old = content[bounds.a .. bounds.b]
+      let newShell =
+        "(globalThis.__cuKwinMode?`The desktop shell is frontmost. Desktop icons, panels, launchers, and widgets belong to Plasma Shell. To interact with them, call request_access with exactly \"plasmashell\" in the apps array. If you need the file manager, request \"Dolphin\" separately. To interact with a different app, use open_application to bring it forward.`:" &
+        old & ")"
       discard replaceLiteralFirst(content, old, newShell)
       echo "  [OK] 13b.kwin-shell-hint: kwin-wayland=plasmashell, regular/other=upstream wording"
       inc descChanges
@@ -1007,8 +1011,11 @@ proc apply*(input: string): string =
 
   # 13b.kwin-shell-grant: shell grant predicate
   block:
+    # v1.28929.0: upstream switched .some(...) (boolean) to .find(...) — the
+    # caller now reads `.tier` off the returned granted app, so the kwin-mode
+    # branch must likewise return the matching app object, not a boolean.
     let pat =
-      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3===["`]darwin["`]\?\2\.some\(([\w$]+)=>\4\.bundleId===([\w$]+)\):\2\.some\(([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\}"""
+      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3===["`]darwin["`]\?\2\.find\(([\w$]+)=>\4\.bundleId===([\w$]+)\):\2\.find\(([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\}"""
     let n = replaceFirst(
       content,
       pat,
@@ -1020,11 +1027,11 @@ proc apply*(input: string): string =
         let macConst = m.captures[4]
         let winIter = m.captures[5]
         let winConst = m.captures[6]
-        header & "return " & plat & "===\"darwin\"?" & apps & ".some(" & darwinIter &
+        header & "return " & plat & "===\"darwin\"?" & apps & ".find(" & darwinIter &
           "=>" & darwinIter & ".bundleId===" & macConst & "):globalThis.__cuKwinMode&&" &
-          plat & "===\"linux\"?" & apps & ".some(" & darwinIter & "=>" & darwinIter &
+          plat & "===\"linux\"?" & apps & ".find(" & darwinIter & "=>" & darwinIter &
           ".bundleId===\"plasmashell\"||" & darwinIter &
-          ".bundleId===\"org.kde.plasmashell\"):" & apps & ".some(" & winIter & "=>" &
+          ".bundleId===\"org.kde.plasmashell\"):" & apps & ".find(" & winIter & "=>" &
           winIter & ".bundleId.toLowerCase()===" & winConst & ")}",
     )
     if n >= 1:

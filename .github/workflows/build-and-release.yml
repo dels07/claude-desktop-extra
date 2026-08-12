@@ -25,11 +25,6 @@ on:
         required: false
         type: string
         default: ''
-      skip_aur:
-        description: 'Skip the AUR preflight + AUR push (use when the AUR is down for maintenance). All other channels publish normally; the AUR catches up automatically on the next non-skipped release.'
-        required: false
-        type: boolean
-        default: false
 
 # Serialize release runs: all workflow_dispatch runs share ONE group with
 # cancel-in-progress off, so a second dispatch (e.g. version-check auto-release
@@ -1908,13 +1903,7 @@ jobs:
       # README versions) is still consistently on the previous version.
       # A failure mid-job instead leaves them half-deployed, because the
       # failed job skips deploy-rpm-repo -> deploy-pages.
-      # For EXTENDED AUR outages, dispatch with skip_aur=true: the release
-      # publishes every other channel and the AUR (a secondary channel -
-      # the pacman repo in the release assets is primary) catches up on
-      # the next non-skipped release, since the AUR push diffs the
-      # PKGBUILD against whatever the AUR currently has.
       - name: Setup SSH for AUR
-        if: ${{ !inputs.skip_aur }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
@@ -1929,7 +1918,6 @@ jobs:
             >> ~/.ssh/config
 
       - name: Preflight - AUR reachable
-        if: ${{ !inputs.skip_aur }}
         run: |
           for i in 1 2 3; do
             if git ls-remote ssh://aur@aur.archlinux.org/claude-desktop-extra.git HEAD; then
@@ -2578,10 +2566,7 @@ jobs:
       # the top of the job already failed fast if the AUR is down, and the
       # retries below ride out short blips in the window since then. SSH
       # config was written by "Setup SSH for AUR" at the top of the job.
-      # Skipped entirely (along with the preflight) when the run was
-      # dispatched with skip_aur=true during an extended AUR outage.
       - name: Push to AUR
-        if: ${{ !inputs.skip_aur }}
         env:
           AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
           AUR_EMAIL: ${{ secrets.AUR_EMAIL }}

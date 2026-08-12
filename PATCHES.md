@@ -47,7 +47,7 @@ Panel tabs depends on DOM anchors in remote claude.ai code; they are inventoried
 
 ## Linux compatibility
 
-**32 patches**, always on and nothing to configure. Upstream ships the same JS bundle to every platform; these open `darwin`/`win32`-only gates for Linux, or fix behavior that only misfires in a Linux desktop environment. Each one is either a feature you would otherwise not have at all, or a bug you would otherwise hit.
+**31 patches**, always on and nothing to configure. Upstream ships the same JS bundle to every platform; these open `darwin`/`win32`-only gates for Linux, or fix behavior that only misfires in a Linux desktop environment. Each one is either a feature you would otherwise not have at all, or a bug you would otherwise hit.
 
 | Patch | What it does & why it exists |
 |-------|------------------------------|
@@ -58,7 +58,6 @@ Panel tabs depends on DOM anchors in remote claude.ai code; they are inventoried
 | [`fix_builtin_mcp_browser_env.nim`](patches/linux/fix_builtin_mcp_browser_env.nim) | Gives built-in MCP servers the display and session variables they need to open a browser for OAuth; upstream's filtered environment has none of them ([#139](https://github.com/patrickjaja/claude-desktop-extra/issues/139)) |
 | [`fix_builtin_mcp_open_url_handler.nim`](patches/linux/fix_builtin_mcp_open_url_handler.nim) | Lets a built-in MCP server ask the app to open an OAuth page, rather than trying to launch a browser from inside its own child process |
 | [`fix_computer_use_linux.nim`](patches/linux/fix_computer_use_linux.nim) | Enables [Computer Use](README.md#computer-use) and routes it to the bundled bridge that matches your session. Upstream gates it to macOS/Windows and ships no Linux backend at all |
-| [`fix_computer_use_tcc.nim`](patches/linux/fix_computer_use_tcc.nim) | Answers the macOS accessibility and screen-recording permission checks with "not applicable"; TCC has no Linux equivalent, and unanswered checks threw in the renderer |
 | [`fix_cowork_firmware_paths_linux.nim`](patches/linux/fix_cowork_firmware_paths_linux.nim) | Finds QEMU firmware and virtiofsd outside Debian's paths, so Cowork stops reporting "Download failed" on Fedora, RHEL, Arch and NixOS ([#177](https://github.com/patrickjaja/claude-desktop-extra/issues/177)) |
 | [`fix_cowork_font.nim`](patches/linux/fix_cowork_font.nim) | Applies your chat font to the Cowork tab, which fell back to a serif face because upstream sets the font only when the Chat view mounts |
 | [`fix_cross_device_rename.nim`](patches/linux/fix_cross_device_rename.nim) | Lets downloads move from `/tmp` into your config directory when the two sit on different filesystems, where a plain rename fails |

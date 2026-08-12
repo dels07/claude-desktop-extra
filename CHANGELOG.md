@@ -2,6 +2,27 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-12
+
+### Claude Desktop v1.28929.0 - two patches re-fitted, one retired as upstreamed
+
+The v1.28929.0 auto-release (issue #225) failed loudly as designed, on two anchors:
+
+- `fix_computer_use_linux` (2 of 36 sub-patches): upstream reworded the desktop-shell hint ("To click on the desktop, ...") and added a win32-only "click-only" caveat as a second interpolation, and it changed the shell-grant predicate from `.some(...)` (a boolean) to `.find(...)` - the caller now reads `.tier` off the returned granted app. Our kwin-wayland branch now returns the matching plasmashell app object instead of a boolean, preserving the tier lookup.
+- `fix_ion_dist_linux`: the 3P config SPA split the org-plugins `mountPath` data object and its platform-ternary consumer into two different chunks. The patch now locates each sub-patch's target file independently by content signature and patches every file that matches.
+
+The shell-grant change is part of a new upstream permission-tier framework (`full`/`click`/`read` grants; on Windows, shell grants become click-only). Verified against the KDE flow: plasmashell is not in upstream's shell click-tier classifier, so KDE shell grants keep full tier, and our auto-grant path already produces `tier:"full"` grant objects - no behavior change for Linux Computer Use. The four bundled bridges sit below the executor CLI/JSON contract and are unaffected.
+
+The full audit (platform gates, feature flags, IPC surface, built-in MCP roster, ion-dist) retired **one patch as upstreamed: `fix_computer_use_tcc`** (44 patches now). Upstream registers a ComputerUseTcc implementation on every platform - real TCC on macOS, a `not-supported` fallback elsewhere - via an eIPC mechanism that replaces any earlier handler, so our ready-time stubs have been dead code at runtime since at least v1.26832.0 and the "No handler registered" error the patch prevented can no longer occur. **Every other patch stays load-bearing**: upstream still ships no Linux Computer Use input or screenshot backend, and the built-in MCP roster and Cowork VM resources are byte-identical to v1.26832.0.
+
+What upstream added: a local session importer (Claude Code CLI sessions, another local install, or a claude.ai export zip - 17 new IPC handlers, gated on the `localSessions` capability), a staged 1P/3P "hybrid transition" deployment switch with credential handoff, SSH-session force-reconnect, and immediate delivery of queued steered messages. The build toolchain moved to Electron Forge 8 alpha and Tailwind 4; bundled Electron stays 42.7.0.
+
+Kept in sync with the release: the Extra -> Deployment panel offers the one new managed-settings key `modelPrefer1mContext` (103 keys total); the GrowthBook flag catalog in the config template was refreshed for v1.28929.0 (+7/-6 flag IDs upstream, plus 23 pre-existing hoisted-const flags earlier extractions had missed - the template now lists 167 flags, and a stale expected-count constant that made a drift diagnostic fire on every launch is fixed); baseline docs (feature flags, platform gates, built-in MCP, ION) re-validated.
+
+### AUR is back - skip_aur dispatch flag retired
+
+The AUR came back from its maintenance window (issue #218 follow-up), so this release pushes the AUR package again and it catches up automatically from 2026-07-31. The `skip_aur` workflow input added for the outage is removed from CI and the /deploy skill; the fail-fast AUR preflight stays.
+
 ## 2026-08-11
 
 ### Every release download is attested (#224)

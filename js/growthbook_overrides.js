@@ -93,7 +93,7 @@
     "// flags with a switch per flag. It writes claude-desktop-extra.json; entries you",
     "// put here win per flag id, and that panel shows those as locked.",
     "// Every GrowthBook flag observed being read from the feature store in Claude",
-    "// Desktop v1.28929.0 is listed below, commented out. Uncomment a line to force",
+    "// Desktop v1.30096.1 is listed below, commented out. Uncomment a line to force",
     "// it; separate multiple active entries with commas (a trailing comma after the",
     "// last one is fine). true/false for switches; flags marked (value flag)",
     "// carry numbers/strings/objects - a bare true may be meaningless for those.",
@@ -105,7 +105,7 @@
     "// (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this",
     "// file entirely. Active overrides are logged to logs/claude-patches.log.",
     "// Flag IDs are Anthropic-internal and can vanish or change meaning in any",
-    "// release (this list reflects v1.28929.0). If the app misbehaves, empty this",
+    "// release (this list reflects v1.30096.1). If the app misbehaves, empty this",
     "// file first.",
     "{",
     "  // \"activeTheme\": \"mario\",",
@@ -201,6 +201,7 @@
     "    // \"1924247864\": true, // device-registry gate (Ylt)",
     "    // \"1928275548\": true, // framebufferPreview feature - dev-gated (inside MW())",
     "    // \"1936081873\": true, // system-prompt build-skip",
+    "    // \"1942337209\": true, // local MCP client protocol version negotiation kill-switch - ON drops the auto version probe (500ms) (new in v1.30096.1)",
     "    // \"1942781881\": true, // Prompt suggestions in sessions",
     "    // \"1947305033\": true, // augments a tool description",
     "    // \"1972091654\": true, // askClaude device RPC",
@@ -303,7 +304,7 @@
   // rather than keeping a second copy means the .jsonc template and the Extra
   // settings page can never disagree about which flags exist.
   var CATALOG_RE = /^\s*\/\/\s*"(\d+)"\s*:\s*[^,]*,\s*\/\/\s*(.*)$/;
-  var CATALOG_EXPECTED = 167;
+  var CATALOG_EXPECTED = 168;
 
   function flagCatalog() {
     if (catalogCache) return catalogCache;

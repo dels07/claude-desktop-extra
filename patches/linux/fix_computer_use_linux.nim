@@ -378,8 +378,15 @@ proc apply*(input: string): string =
       # matches two nested `async(e,t)=>{` permission callbacks that sit ~7k
       # chars upstream of the decl, which would capture THEIR `e` as the tool
       # name — a silent mis-binding, not a build failure.
+      #
+      # v1.30096.1 introduced the grant-tier rework, which hoists three more
+      # declarations out of the options object and in between the setTimeout and
+      # the object literal (`,b=[...ctx.getAllowedApps()],x=ctx.getGrantFlags(),
+      # S=ctx.getUserDeniedBundleIds(),C={...,grants:g(b,S),...}`). Allow any
+      # number of such comma-free simple declarations before the options object
+      # rather than pinning their shape.
       let seedPat =
-        re"""return async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?(?:const|let|var) ([\w$]+)=([\w$]+)\?void 0:[\w$]+(?:\.[\w$]+)*\.getLastScreenshotDims\?\.\(\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(\)=>\4\.abort\(\),[\w$]+\))?,([\w$]+)=\{"""
+        re"""return async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?(?:const|let|var) ([\w$]+)=([\w$]+)\?void 0:[\w$]+(?:\.[\w$]+)*\.getLastScreenshotDims\?\.\(\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(\)=>\4\.abort\(\),[\w$]+\))?(?:,[\w$]+=[^{},]{1,200})*,([\w$]+)=\{"""
       let maybeSeed = content.find(seedPat)
       if maybeSeed.isNone:
         echo "  [FAIL] screenshot intro note: wrapper seed anchor not found"

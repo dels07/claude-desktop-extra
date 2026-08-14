@@ -167,8 +167,12 @@ proc apply*(input: string): string =
   # We DO override the features we genuinely provide the backend for on Linux:
   # Claude Code / dispatch (chillingSloth*), Computer Use (we ship the input +
   # screenshot backends), plugins (ccdPlugins), and the penguin prefs.
+  # chillingSlothPool was dropped here in v1.30096.1: upstream removed the
+  # feature from the registry and the Zod schema in v1.28929.0 (flag 1992087837
+  # survives only as the CC worktree warm-pool gate), so the key was a no-op
+  # riding along on a non-strict `.partial()` schema.
   let overrides =
-    ",quietPenguin:{status:\"supported\"},louderPenguin:{status:\"supported\"},chillingSlothFeat:{status:\"supported\"},chillingSlothLocal:{status:\"supported\"},chillingSlothPool:{status:\"supported\"},ccdPlugins:{status:\"supported\"},computerUse:{status:\"supported\"}"
+    ",quietPenguin:{status:\"supported\"},louderPenguin:{status:\"supported\"},chillingSlothFeat:{status:\"supported\"},chillingSlothLocal:{status:\"supported\"},ccdPlugins:{status:\"supported\"},computerUse:{status:\"supported\"}"
 
   # New format: return{...FUNC(),...props}}; or }},
   let pattern3New = re"(return\{\.\.\.(?:[\w$]+)\(\),[^}]+)(\}\}[;,])"
@@ -179,7 +183,7 @@ proc apply*(input: string): string =
     let endTag = "}}" & endChar
     let insertPos = bounds.b + 1 - endTag.len
     result = result[0 ..< insertPos] & overrides & endTag & result[bounds.b + 1 .. ^1]
-    echo "  [OK] mC() feature merger: 7 features overridden (1 match)"
+    echo "  [OK] mC() feature merger: 6 features overridden (1 match)"
     inc patchesApplied
   else:
     # Fallback: old format
@@ -195,7 +199,7 @@ proc apply*(input: string): string =
         m.captures[0] & m.captures[1] & overrides & "})",
     )
     if count3 >= 1:
-      echo &"  [OK] mC() feature merger: 7 features overridden (old format, {count3} match)"
+      echo &"  [OK] mC() feature merger: 6 features overridden (old format, {count3} match)"
       inc patchesApplied
     else:
       echo "  [FAIL] mC() feature merger: 0 matches, expected 1"

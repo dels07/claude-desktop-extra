@@ -2,6 +2,22 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-14
+
+### Claude Desktop v1.30096.1 - two patches re-fitted, fix_tray_dbus retired as obsolete
+
+The v1.30096.1 auto-release (issue #226) failed on a transient GitHub API rate limit in the version-check step, before any patch ran. The local update run then surfaced the real breaks:
+
+- `fix_computer_use_linux` (1 of 36 sub-patches): the grant-tier rework hoisted `allowedApps`/`grantFlags`/`userDeniedBundleIds` out of the CU tool-handler's options object into their own bindings feeding the new `grants:` tier lookup, which broke the screenshot-note seed anchor. The seed now tolerates interleaved simple declarations; the injection binds to the new names unchanged.
+- `fix_tray_icon_theme`: upstream extracted the tray icon filename switch into a helper that returns (with a crash-retry fallback parameter), so the assign-and-break anchor got 0 matches. The patch now rewrites the `png` case's return expression; the Linux gap itself is unchanged upstream (a light desktop theme still gets the invisible icon without us).
+- **`fix_tray_dbus` removed (43 patches now):** the destroy-and-recreate-per-update tray architecture it serialized is gone upstream - the tray updates in place via `setImage`, destroys only when the tray is disabled, and this release gained its own crash-containment wrapper. That wrapper split exposed the patch as broken: it async-converted the wrapper but injected its `await` into the still-synchronous worker, failing the post-patch syntax check while reporting all sub-patches green. With the race structurally gone there is nothing left to inject.
+
+The full audit came back clean: the bundle consolidated from 339 to 104 chunks (no size growth), no new darwin/win32 gate lacks Linux support, no new native modules, the built-in MCP roster and Cowork VM probes are unchanged, ion-dist's patch sites re-verified, and Electron stays 42.7.0. Audit-recipe hardening from this round: bundle-wide greps must span `index.pre.js` plus both chunk families (`index.chunk-*` and `index2.chunk-*`) - a concat missing either produces plausible-looking but wrong counts (the baseline docs now say so).
+
+What upstream added: session export/import as zip bundles (replacing v1.28929.0's local-session scan/import handlers), scheduled-task cron shapes with self-resume wakeups, tray crash containment with a forced-dark fallback icon, structured spawn-error telemetry, GrowthBook targeting by device class and RAM, and the Parka meeting-recording interface moved to its own IPC origin.
+
+Kept in sync with the release: the Extra -> Deployment panel offers the two new OTLP managed-settings keys `otlpAuthMode` and `otlpHeadersHelper` (105 keys total); the GrowthBook flag catalog gained `1942337209` (local MCP version-negotiation kill-switch; 168 entries); `enable_local_agent_mode` dropped the vestigial `chillingSlothPool` override key; baseline docs (feature flags, platform gates, built-in MCP, ION) re-validated.
+
 ## 2026-08-12
 
 ### Claude Desktop v1.28929.0 - two patches re-fitted, one retired as upstreamed

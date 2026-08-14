@@ -330,7 +330,7 @@ git push
 
 ```
 patches/           # Nim patch sources (.nim) + Makefile, compiled to native binaries (ls patches/*/*.nim)
-patches/linux/     #   Linux compatibility - always on, not user-configurable (31)
+patches/linux/     #   Linux compatibility - always on, not user-configurable (30)
 patches/community/ #   Opt-in features, each with a switch in Settings -> Extra -> Community Features (6)
 patches/core/      #   Always-on infrastructure the rest builds on: the Extra settings pages, the theme
                    #   engine, the GrowthBook override mechanism, multi-profile plumbing (7)

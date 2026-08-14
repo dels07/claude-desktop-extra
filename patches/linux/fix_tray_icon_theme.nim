@@ -5,66 +5,70 @@
 #
 # The official Linux .deb has native Linux tray-icon logic: a `switch` on a
 # build-time icon-type constant ("ico"/"template-image"/"png"; "png" on Linux
-# builds), whose png case picks the icon per desktop environment and theme:
+# builds), whose png case picks the icon per desktop environment and theme.
 #
-#   let e=CFG(`menuBarEnabled`),t;switch(`png`){
-#     case`ico`: t=ELEC.nativeTheme.shouldUseDarkColors?`Tray-Win32-Dark.ico`:`Tray-Win32.ico`;break;
-#     case`template-image`: t=`TrayIconTemplate.png`;break;
-#     case`png`: t=ere()===`gnome`||ELEC.nativeTheme.shouldUseDarkColors?`TrayIconLinux-Dark.png`:`TrayIconLinux.png`;break
-#   }let n=...
+# v1.30096.1 extracted that switch into its own filename helper that RETURNS
+# the icon name (previously it assigned to a `let` in the tray-update
+# function), and added a fallback parameter that the crash-containment
+# wrapper passes as `!0` on a retry:
 #
-# (v1.26832.0 reshaped this: string literals became backticks, the switch
-# scrutinee is now the constant-folded literal `png` rather than a build-time
-# variable, and the icon variable is the second declarator of a shared `let`
-# instead of its own bare `let e;`. We therefore anchor purely on the three
-# case bodies and capture the icon variable from the `ico` case.)
+#   function yer(e){switch(`png`){
+#     case`ico`: return!e&&ELEC.nativeTheme.shouldUseDarkColors?`Tray-Win32-Dark.ico`:`Tray-Win32.ico`;
+#     case`template-image`: return`TrayIconTemplate.png`;
+#     case`png`: return e||AL()===`gnome`||ELEC.nativeTheme.shouldUseDarkColors?`TrayIconLinux-Dark.png`:`TrayIconLinux.png`
+#   }}
+#
+# (v1.26832.0 had reshaped it before that: string literals became backticks and
+# the switch scrutinee is the constant-folded literal `png` rather than a
+# build-time variable. We anchor on the three case bodies, which is the one
+# shape that survived both refactors.)
 #
 # That heuristic is wrong for us: it only forces the dark icon on GNOME, and
 # otherwise follows nativeTheme. But Linux system trays are almost universally
 # dark (KDE, Xfce, status-notifier hosts, ...) regardless of the app/desktop
 # theme, so on a light theme outside GNOME upstream picks the dark-on-dark
 # TrayIconLinux.png and the icon is invisible. We deliberately OVERRIDE the
-# native heuristic: inject a statement right after the switch that forces
-# TrayIconLinux-Dark.png (the light glyph) on Linux regardless of which case
-# ran. (Minified names like G1r/ere change every release - the regex uses
+# native heuristic: rewrite the png case so it returns TrayIconLinux-Dark.png
+# (the light glyph) on Linux, keeping upstream's expression as the non-Linux
+# fallback. (Minified names like yer/AL change every release - the regex uses
 # [\w$]+ wildcards; the icon files ship in the official .deb.)
 
 import std/os
 import std/nre
 
+const INJECTED = """process.platform==="linux"?"TrayIconLinux-Dark.png":"""
+
 proc apply*(input: string): string =
-  # Idempotency: our injected override carries this shape (the icon variable
-  # is minified and renames between releases - e in <=1.18286, t in 1.19367).
+  # Idempotency: positively assert OUR rewritten png case is present, rather
+  # than merely that the upstream shape is gone.
   if input.contains(
-    re""";process\.platform==="linux"&&\([\w$]+="TrayIconLinux-Dark\.png"\);"""
+    re"""case["`]png["`]:return process\.platform==="linux"\?"TrayIconLinux-Dark\.png":"""
   ):
     echo "  [OK] tray icon theme logic: already patched (skipped)"
     result = input
     return
 
-  # Match the whole switch block that assigns the tray icon filename to the
-  # (minified, capture it) icon variable, anchored on the three case literals
-  # so we pin the one correct site.
+  # Match the switch that maps the build-time icon flavor to a filename,
+  # anchored on all three case bodies so we pin the one correct site, and
+  # capture the png case's expression so we can keep it as the non-Linux
+  # branch. Group 1 = everything up to and including `case`png`:return `,
+  # group 2 = upstream's png expression (incl. the fallback-param prefix).
   # Variable names may contain $ (valid JS identifier), so use [\w$]+.
-  # Quoting is minifier-dependent (double quotes <=1.24012.x, backticks in
+  # Quoting is minifier-dependent (double quotes <=1.24012.x, backticks since
   # 1.26832.0), so every literal accepts either via ["`].
   let pattern =
-    re"""switch\((?:[\w$]+|["`][\w-]+["`])\)\{case["`]ico["`]:([\w$]+)=[\w$]+\.nativeTheme\.shouldUseDarkColors\?["`]Tray-Win32-Dark\.ico["`]:["`]Tray-Win32\.ico["`];break;case["`]template-image["`]:\1=["`]TrayIconTemplate\.png["`];break;case["`]png["`]:\1=[\w$]+(?:\.[\w$]+)*\(\)===["`]gnome["`]\|\|[\w$]+\.nativeTheme\.shouldUseDarkColors\?["`]TrayIconLinux-Dark\.png["`]:["`]TrayIconLinux\.png["`];break\}"""
+    re"""(switch\((?:[\w$]+|["`][\w-]+["`])\)\{case["`]ico["`]:return\s*(?:!?[\w$]+&&)?[\w$]+(?:\.[\w$]+)*\.nativeTheme\.shouldUseDarkColors\?["`]Tray-Win32-Dark\.ico["`]:["`]Tray-Win32\.ico["`];case["`]template-image["`]:return\s*["`]TrayIconTemplate\.png["`];case["`]png["`]:return)\s*((?:[\w$]+\|\|)?[\w$]+(?:\.[\w$]+)*\(\)===["`]gnome["`]\|\|[\w$]+(?:\.[\w$]+)*\.nativeTheme\.shouldUseDarkColors\?["`]TrayIconLinux-Dark\.png["`]:["`]TrayIconLinux\.png["`])\}"""
   var count = 0
   result = input.replace(
     pattern,
     proc(m: RegexMatch): string =
       inc count
-      let iconVar = m.captures[0]
-      # Re-emit the matched switch verbatim, then force the dark Linux icon on
-      # Linux (trays there are universally dark; upstream now ships
-      # TrayIconLinux.png / TrayIconLinux-Dark.png and the false branch of
-      # Eni()==="gnome"||... would otherwise pick the light TrayIconLinux.png).
-      # Trailing ';' is required: the matched switch is followed immediately
-      # by a `let`/`const` declaration with no line terminator, so without it
-      # the injected expression statement runs into it (Unexpected token).
-      m.match & ";process.platform===\"linux\"&&(" & iconVar &
-        "=\"TrayIconLinux-Dark.png\");",
+      # Force the dark (light-glyph) Linux icon on Linux; Linux trays are
+      # universally dark, and upstream's AL()==="gnome"||shouldUseDarkColors
+      # heuristic otherwise returns the dark-on-dark TrayIconLinux.png.
+      # A space after `return` keeps the injected keyword-adjacent token legal;
+      # upstream's expression is parenthesised so it stays the else branch.
+      m.captures[0] & " " & INJECTED & "(" & m.captures[1] & ")}",
   )
   if count == 0:
     echo "  [FAIL] tray icon theme logic: 0 matches"

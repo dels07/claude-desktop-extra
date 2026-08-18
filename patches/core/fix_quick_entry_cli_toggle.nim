@@ -37,8 +37,11 @@ proc apply*(input: string): string =
     # namespaces (T.p(T.l.QUICK_ENTRY, ...)) and made the focus-branch callee a
     # namespaced import too (i.T(u.f)), so every CALLEE slot is a dotted chain
     # as well.
+    # v1.32352.1: the minifier wraps callback arrows in an extra paren pair
+    # (Xrn($V.QUICK_ENTRY,(()=>{...}))), so the arrow allows an optional
+    # surrounding ( ... ). The replacement re-emits the call without the wrap.
     let patA =
-      re2"([\w$]+(?:\.[\w$]+)*)\(([\w$]+(?:\.[\w$]+)*)\.QUICK_ENTRY,(\(\)=>\{[\w$]+(?:\.[\w$]+)*&&![\w$]+(?:\.[\w$]+)*\.isDestroyed\(\)&&[\w$]+(?:\.[\w$]+)*\.isFullScreen\(\)\?\([\w$]+(?:\.[\w$]+)*\.focus\(\),[\w$]+(?:\.[\w$]+)*\((?:[\w$]+(?:\.[\w$]+)*)?\)\):[\w$]+(?:\.[\w$]+)*\((?:[\w$]+(?:\.[\w$]+)*)?\)\})\)"
+      re2"([\w$]+(?:\.[\w$]+)*)\(([\w$]+(?:\.[\w$]+)*)\.QUICK_ENTRY,\(?(\(\)=>\{[\w$]+(?:\.[\w$]+)*&&![\w$]+(?:\.[\w$]+)*\.isDestroyed\(\)&&[\w$]+(?:\.[\w$]+)*\.isFullScreen\(\)\?\([\w$]+(?:\.[\w$]+)*\.focus\(\),[\w$]+(?:\.[\w$]+)*\((?:[\w$]+(?:\.[\w$]+)*)?\)\):[\w$]+(?:\.[\w$]+)*\((?:[\w$]+(?:\.[\w$]+)*)?\)\})\)?\)"
 
     var countA = 0
     var resultStr = ""
@@ -130,14 +133,18 @@ proc apply*(input: string): string =
   # handler body starting with our Array.isArray argv check) - a plain
   # substring probe for the trigger flag is satisfied by sub-patch A/C's
   # injected text and silently skips B on a fresh bundle (Rule 6).
+  # v1.32352.1: the minifier wraps the handler arrow in an extra paren pair
+  # (.on(`second-instance`,((t,n,r)=>{...))), so the head allows an optional
+  # extra open paren; the head capture re-emits whatever was consumed verbatim,
+  # keeping the parens balanced for both shapes.
   let patBApplied =
-    re2"\.on\([""`]second-instance[""`],\([\w$]+,[\w$]+,[\w$]+\)=>\{if\(Array\.isArray\([\w$]+\)&&\([\w$]+\.includes\(""--toggle-quick-entry""\)"
+    re2"\.on\([""`]second-instance[""`],\(?\([\w$]+,[\w$]+,[\w$]+\)=>\{if\(Array\.isArray\([\w$]+\)&&\([\w$]+\.includes\(""--toggle-quick-entry""\)"
   if result.contains(patBApplied):
     echo "  [INFO] sub-patch B already applied -- skipped"
     applied += 1
   else:
     let patB =
-      re2"(\.on\([""`]second-instance[""`],\()([\w$]+),([\w$]+),([\w$]+)(\)=>\{)"
+      re2"(\.on\([""`]second-instance[""`],\(?\()([\w$]+),([\w$]+),([\w$]+)(\)=>\{)"
 
     var countB = 0
     var resultStr2 = ""

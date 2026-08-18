@@ -153,7 +153,11 @@ proc apply*(input: string): string =
     # v1.26832.0 switched minifier: most string literals became backtick
     # template literals (app.on(`ready`)). Accept either quote style here and
     # everywhere else a literal is part of an anchor.
-    let pat = re"""(app\.on\(["`]ready["`],async\(\)=>\{)"""
+    # v1.32352.1: the minifier now parenthesises function expressions passed as
+    # call arguments - `app.on(`ready`,(async()=>{...}))`. Allow the optional
+    # `(` before the arrow; we only insert after `{`, so the extra closing paren
+    # stays upstream's own.
+    let pat = re"""(app\.on\(["`]ready["`],\(?async\(\)=>\{)"""
     let n = replaceFirst(
       content,
       pat,
@@ -385,8 +389,11 @@ proc apply*(input: string): string =
       # S=ctx.getUserDeniedBundleIds(),C={...,grants:g(b,S),...}`). Allow any
       # number of such comma-free simple declarations before the options object
       # rather than pinning their shape.
+      # v1.32352.1: the minifier parenthesises arrow arguments -
+      # `setTimeout((()=>v.abort()),or)` - so the wrapping parens around the
+      # abort arrow are optional.
       let seedPat =
-        re"""return async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?(?:const|let|var) ([\w$]+)=([\w$]+)\?void 0:[\w$]+(?:\.[\w$]+)*\.getLastScreenshotDims\?\.\(\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(\)=>\4\.abort\(\),[\w$]+\))?(?:,[\w$]+=[^{},]{1,200})*,([\w$]+)=\{"""
+        re"""return async\(([\w$]+),[\w$]+\)=>\{[\s\S]{0,8000}?(?:const|let|var) ([\w$]+)=([\w$]+)\?void 0:[\w$]+(?:\.[\w$]+)*\.getLastScreenshotDims\?\.\(\),([\w$]+)=new AbortController(?:,[\w$]+=setTimeout\(\(?\(\)=>\4\.abort\(\)\)?,[\w$]+\))?(?:,[\w$]+=[^{},]{1,200})*,([\w$]+)=\{"""
       let maybeSeed = content.find(seedPat)
       if maybeSeed.isNone:
         echo "  [FAIL] screenshot intro note: wrapper seed anchor not found"
@@ -936,8 +943,10 @@ proc apply*(input: string): string =
   block:
     # v1.26832.0: `const`→`let`, `=="string"`→`==\`string\``, and the error
     # strings are backtick templates.
+    # v1.32352.1: arrow arguments are parenthesised - `.every((e=>...))` - so
+    # the wrapping parens are optional.
     let pat =
-      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3==["`]string["`]\)\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var) )([\w$]+)=\2(,[\w$]+=\{\};)"""
+      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(\(?([\w$]+)=>typeof \3==["`]string["`]\)\)?\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var) )([\w$]+)=\2(,[\w$]+=\{\};)"""
     let n = replaceFirst(
       content,
       pat,
@@ -964,8 +973,9 @@ proc apply*(input: string): string =
   # map the ARGUMENT instead of introducing a binding — that also keeps working
   # whichever declarator upstream picks, since nothing is reassigned.
   block:
+    # v1.32352.1: same optional arrow-wrapping parens as 13b.kwin-alias.
     let pat =
-      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(([\w$]+)=>typeof \3==["`]string["`]\)\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var)\{needDialog:[\s\S]{0,400}?\}=await [\w$]+\([\w$]+,)\2(,)"""
+      re"""((?:const|let|var) ([\w$]+)=[\w$]+\.apps;if\(!Array\.isArray\(\2\)\|\|!\2\.every\(\(?([\w$]+)=>typeof \3==["`]string["`]\)\)?\)return [\w$]+\(['"`]"apps" must be an array of strings\.['"`],["`]bad_args["`]\);(?:const|let|var)\{needDialog:[\s\S]{0,400}?\}=await [\w$]+\([\w$]+,)\2(,)"""
     let n = replaceFirst(
       content,
       pat,
@@ -994,8 +1004,10 @@ proc apply*(input: string): string =
     # `"` needs no escaping.
     let prefix =
       "`The desktop shell is frontmost. Double-click, right-click, and Enter on desktop items can launch applications outside the allowlist. To click on the desktop, taskbar, Start menu, Search, or file manager, call request_access with exactly \"${"
+    # v1.32352.1: the minifier escapes non-ASCII as \uXXXX inside literals -
+    # the em-dash is now the six ASCII chars \u2014, not raw UTF-8 bytes.
     let mid =
-      "===`win32`?`File Explorer`:`Finder`}\" in the apps array \xe2\x80\x94 that single grant covers all of them.${"
+      "===`win32`?`File Explorer`:`Finder`}\" in the apps array \\u2014 that single grant covers all of them.${"
     let suffix =
       "===`win32`?` That grant is click-only: typing into the shell stays blocked.`:``} To interact with a different app, use open_application to bring it forward.`"
     let pat = re(
@@ -1021,8 +1033,11 @@ proc apply*(input: string): string =
     # v1.28929.0: upstream switched .some(...) (boolean) to .find(...) — the
     # caller now reads `.tier` off the returned granted app, so the kwin-mode
     # branch must likewise return the matching app object, not a boolean.
+    # v1.32352.1: arrow arguments are parenthesised - `.find((e=>...))` - so
+    # the wrapping parens are optional. The replacement emits unwrapped arrows,
+    # which is equally valid JS.
     let pat =
-      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3===["`]darwin["`]\?\2\.find\(([\w$]+)=>\4\.bundleId===([\w$]+)\):\2\.find\(([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\}"""
+      re"""(function [\w$]+\(([\w$]+),([\w$]+)\)\{)return \3===["`]darwin["`]\?\2\.find\(\(?([\w$]+)=>\4\.bundleId===([\w$]+)\)\)?:\2\.find\(\(?([\w$]+)=>\6\.bundleId\.toLowerCase\(\)===([\w$]+)\)\)?\}"""
     let n = replaceFirst(
       content,
       pat,
@@ -1117,13 +1132,16 @@ proc apply*(input: string): string =
   # hits the tool definition site, not the runtime error strings that reuse the
   # same sentence.
   block:
+    # v1.32352.1: the em-dash is emitted as the six-char \u2014 escape (see
+    # 13b.kwin-shell-hint). The re-emitted branch keeps the escape, which JS
+    # decodes to the same character.
     let old13e =
-      "The target must already be in the session allowlist \xe2\x80\x94 call request_access first.`,inputSchema:"
+      "The target must already be in the session allowlist \\u2014 call request_access first.`,inputSchema:"
     let new13e =
       "${process.platform===\"linux\"?" &
       "\"On Linux, all applications are directly accessible.\"" & ":" &
       "\"The target must already be in the session allowlist " &
-      "\xe2\x80\x94 call request_access first.\"}`,inputSchema:"
+      "\\u2014 call request_access first.\"}`,inputSchema:"
     if replaceLiteralFirst(content, old13e, new13e) == 1:
       echo "  [OK] 13e open_application: no allowlist on Linux"
       inc descChanges
@@ -1133,13 +1151,14 @@ proc apply*(input: string): string =
 
   # 13f: screenshot description — clean on Linux
   block:
+    # v1.32352.1: em-dash emitted as the \u2014 escape (see 13e).
     let old13f =
-      "`Take a screenshot of the primary display. On this platform, screenshots are NOT filtered \xe2\x80\x94 all open windows are visible. Input actions targeting apps not in the session allowlist are rejected.`"
+      "`Take a screenshot of the primary display. On this platform, screenshots are NOT filtered \\u2014 all open windows are visible. Input actions targeting apps not in the session allowlist are rejected.`"
     let new13f =
       "(process.platform===\"linux\"?" &
       "\"Take a screenshot of the primary display. All open windows are visible.\"" & ":" &
       "\"Take a screenshot of the primary display. On this platform, " &
-      "screenshots are NOT filtered \xe2\x80\x94 all open windows are visible. " &
+      "screenshots are NOT filtered \\u2014 all open windows are visible. " &
       "Input actions targeting apps not in the session allowlist are rejected.\")"
     if replaceLiteralFirst(content, old13f, new13f) == 1:
       echo "  [OK] 13f screenshot: clean description on Linux"
@@ -1177,8 +1196,9 @@ proc apply*(input: string): string =
   # ─── Patch 14: Linux-aware CU system prompt ──────────────────────────
   # 14a: separate filesystems → 3-way same-filesystem wording (2 occurrences)
   block:
+    # v1.32352.1: em-dash emitted as the \u2014 escape (see 13e).
     let sepOldFull2 =
-      "**Separate filesystems.** Computer-use actions (clicks, typing, clipboard writes) happen on the user's real computer \xe2\x80\x94 a different system from your sandbox. "
+      "**Separate filesystems.** Computer-use actions (clicks, typing, clipboard writes) happen on the user's real computer \\u2014 a different system from your sandbox. "
     let sepCount = countOccurrences(content, sepOldFull2)
     if sepCount >= 2:
       let sepNewFull =
@@ -1190,7 +1210,7 @@ proc apply*(input: string): string =
         "There is no sandbox \\u2014 files you create are directly accessible to desktop applications and vice versa. " &
         "\")" &
         ":\"**Separate filesystems.** Computer-use actions (clicks, typing, clipboard writes) " &
-        "happen on the user's real computer \xe2\x80\x94 a different system from your sandbox. " &
+        "happen on the user's real computer \\u2014 a different system from your sandbox. " &
         "\"}"
       discard replaceLiteralAll(content, sepOldFull2, sepNewFull)
       echo &"  [OK] 14a separate filesystems: 3-way replace, {sepCount} occurrences"

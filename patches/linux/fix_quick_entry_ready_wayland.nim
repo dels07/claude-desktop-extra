@@ -27,6 +27,11 @@ proc apply*(input: string): string =
   # v1.26832.0 emits the `?.` operator directly and uses backtick template
   # literals:
   #   <FLAG>||await <P>?.catch(<E>=>{<LOG>.error(`Quick Entry: Error waiting for ready %o`,{error:<E>}))
+  # v1.32352.1 parenthesizes the awaited expression and the catch callback:
+  #   <FLAG>||await(<P>?.catch((<E>=>{...})))
+  # so `await` is followed by a space OR an open paren, and the callback and
+  # the awaited expression each allow an optional surrounding paren pair. The
+  # replacement is built from scratch and self-balanced either way.
   # Variable names change every release (NEe/YEe, nK/AK, etc.) and so does the
   # logger module (`n.o` in v1.26832.0 -- a dotted chunk namespace now). We must
   # REUSE the upstream logger and catch param in the replacement -- hardcoding
@@ -40,7 +45,7 @@ proc apply*(input: string): string =
     return input
 
   let pat =
-    re"""([\w$]+)\|\|await ([\w$]+)\?\.catch\((([\w$]+)=>\{[\w$]+(?:\.[\w$]+)*\.error\([`"]Quick Entry: Error waiting for ready %o[`"],\{error:\4\}\)\})\)"""
+    re"""([\w$]+)\|\|await[ (]([\w$]+)\?\.catch\(\(?(([\w$]+)=>\{[\w$]+(?:\.[\w$]+)*\.error\([`"]Quick Entry: Error waiting for ready %o[`"],\{error:\4\}\)\})\)?\)\)?"""
 
   let m = input.find(pat)
   if m.isSome:

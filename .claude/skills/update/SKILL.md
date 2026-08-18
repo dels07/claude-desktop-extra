@@ -62,7 +62,7 @@ Check `enable_local_agent_mode.nim`'s override list still covers the cowork/code
 
 Also refresh the flag catalog in `js/growthbook_overrides.js` (TEMPLATE): it lists every store-consulted flag of the audited version, commented out. Extract IDs with `rg -o '[\w$]+(?:\.[\w$]+)*\("([0-9]{6,10})"[,)]' -r '$1' <new-bundle-concat> | sort -u`, drop the IDs force-rewritten by patches (`rg -oI '"[0-9]{6,10}"' patches/*/*.nim`, minus IDs only mentioned in comments), and update descriptions + the version stamp in the header. Then regenerate the browsable copy and rebuild the binary:
 ```bash
-node scripts/check-jsonc-template-sync.sh --write   # updates docs/claude-desktop-extra.jsonc
+bash scripts/check-jsonc-template-sync.sh --write   # updates docs/claude-desktop-extra.jsonc
 touch patches/core/add_growthbook_overrides.nim && (cd patches && make)  # Makefile doesn't track staticRead deps
 ```
 CI runs `scripts/check-jsonc-template-sync.sh` (no `--write`) and fails if the docs catalog drifts from the shipped template.

@@ -19,7 +19,10 @@ proc apply*(input: string): string =
 
   # v1.26832.0 emits event names as backtick template literals, so the quote
   # character is matched quote-agnostically.
-  let pat = re2"([\w$]+)\.on\([""`]blur[""`],\(\)=>\{([\w$]+)\(null\)\}\)"
+  # v1.32352.1 wraps the callback arrow in an extra paren pair
+  # (.on(`blur`,(()=>{cG(null)}))), matched as an optional surrounding
+  # ( ... ); the replacement re-emits the .on calls without the wrap.
+  let pat = re2"([\w$]+)\.on\([""`]blur[""`],\(?\(\)=>\{([\w$]+)\(null\)\}\)?\)"
 
   var count = 0
   var resultStr = ""

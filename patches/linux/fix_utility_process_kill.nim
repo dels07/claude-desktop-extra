@@ -12,43 +12,86 @@
 import std/[os, strutils]
 import regex
 
-const AppliedPattern =
-  re2"""\.kill\("SIGKILL"\);[^`]{0,100}\.info\(`Killing utiltiy proccess again"""
+# Positive end-state assertions (Rule 6): our signal parameter threaded through
+# the kill helper, and our "SIGKILL" argument at the timeout-fallback call site
+# that the `Killing utiltiy proccess again` log pins.
+const AppliedDefPattern =
+  re2"""killOrDeferToSpawn\([\w$]+,__cdbSig\)\{return [\w$]+\.kill\(__cdbSig\)"""
+const AppliedCallPattern =
+  re2"""killOrDeferToSpawn\([\w$]+,"SIGKILL"\),[\w$]+(?:\.[\w$]+)*\.info\(`Killing utiltiy proccess again"""
+
+const ExpectedPatches = 2
 
 proc apply*(input: string): string =
-  # Positive end-state assertion (Rule 6): our SIGKILL argument, still sitting
-  # in front of the log call that pins the site.
-  if input.contains(AppliedPattern):
+  if input.contains(AppliedDefPattern) and input.contains(AppliedCallPattern):
     echo "  [OK] UtilityProcess SIGKILL fix: already applied (idempotent)"
     return input
 
-  # Pattern: The setTimeout callback that tries to kill the UtilityProcess
-  # after 5 seconds. Matches (v1.9659.4):
-  #   const a=(s=this.process)==null?void 0:s.kill();te.info(`Killing utiltiy proccess again
-  # and (v1.11187.4, an intervening `r&&this.noteKillOnce(),` was inserted):
-  #   const r=(n=this.process)==null?void 0:n.kill();r&&this.noteKillOnce(),D.info(`Killing utiltiy proccess again
-  # and (v1.26832.0, the new minifier keeps optional chaining instead of the
-  # transpiled `(x=this.process)==null?void 0:x.` form, and prefers `let`):
-  #   let t=this.process?.kill();t&&this.noteKillOnce(),r.o.info(`Killing utiltiy proccess again
-  #
-  # Group 2 tolerates any short run of statements between .kill() and the
-  # `.info(\`Killing utiltiy proccess again` log call (e.g. noteKillOnce()).
-  let pattern =
-    re2"""((?:const|let|var) [\w$]+=(?:\([\w$]+=this\.process\)==null\?void 0:[\w$]+\.|this\.process\?\.))kill\(\)(;[^`]{0,100}\.info\(`Killing utiltiy proccess again)"""
-  var count = 0
+  # Shape history of the 5-second timeout fallback in _close():
+  #   v1.9659.4:   const a=(s=this.process)==null?void 0:s.kill();te.info(`Killing utiltiy proccess again
+  #   v1.11187.4:  const r=(n=this.process)==null?void 0:n.kill();r&&this.noteKillOnce(),D.info(`Killing utiltiy proccess again
+  #   v1.26832.0:  let t=this.process?.kill();t&&this.noteKillOnce(),r.o.info(`Killing utiltiy proccess again
+  #   v1.32352.1:  upstream hoisted the kill into a method used by every kill
+  #   site (first graceful kill in _close, intentional-close kills during
+  #   start/spawn-timeout, AND the timeout fallback):
+  #     killOrDeferToSpawn(e){return e.kill()?(this.noteKillOnce(),!0):!this.killDeferredProcs.has(e)&&(...,e.once(`spawn`,(()=>{e.kill()&&this.noteKillOnce()})),!1)}
+  #     ...
+  #     let n=setTimeout((()=>{D.warn(`UtilityProcess did not exit gracefully, killing... id=${...}`),this.killOrDeferToSpawn(e),D.info(`Killing utiltiy proccess again: id=${...}`),t()}),5e3);
+  #   The method still calls plain e.kill(), so the fallback is still not a
+  #   SIGKILL. Two coordinated sub-patches restore the fix without touching
+  #   the graceful kills:
+  #     1. thread a signal parameter through the method:
+  #          killOrDeferToSpawn(e,__cdbSig){return e.kill(__cdbSig)?...
+  #        (one-arg callers pass undefined -> default graceful kill, unchanged;
+  #        the deferred-to-spawn retry inside the method stays graceful too)
+  #     2. pass "SIGKILL" at the timeout-fallback call site only, pinned by the
+  #        adjacent `Killing utiltiy proccess again` log call.
+  var patchesApplied = 0
+
+  # --- Sub-patch 1: signal parameter on the kill helper ---
+  let defPattern =
+    re2"""(killOrDeferToSpawn\()([\w$]+)(\)\{return )([\w$]+)\.kill\(\)\?"""
+  var defCount = 0
   result = input.replace(
-    pattern,
+    defPattern,
     proc(m: RegexMatch2, s: string): string =
-      inc count
-      # Replace .kill() with .kill("SIGKILL")
-      s[m.group(0)] & """kill("SIGKILL")""" & s[m.group(1)],
+      let param = s[m.group(1)]
+      let obj = s[m.group(3)]
+      if param != obj:
+        # kill() target is not the method's parameter -- shape drifted; re-emit
+        # the match untouched so the count stays 0 and we fail loudly.
+        return s[m.group(0)] & param & s[m.group(2)] & obj & ".kill()?"
+      inc defCount
+      s[m.group(0)] & param & ",__cdbSig" & s[m.group(2)] & obj & ".kill(__cdbSig)?",
   )
-  if count == 0:
+  if defCount > 0:
+    echo "  [OK] killOrDeferToSpawn signal parameter: " & $defCount & " match(es)"
+    inc patchesApplied
+  else:
+    echo "  [FAIL] killOrDeferToSpawn definition pattern: 0 matches"
+
+  # --- Sub-patch 2: SIGKILL at the timeout-fallback call site ---
+  let callPattern =
+    re2"""(this\.killOrDeferToSpawn\()([\w$]+)\)(,[\w$]+(?:\.[\w$]+)*\.info\(`Killing utiltiy proccess again)"""
+  var callCount = 0
+  result = result.replace(
+    callPattern,
+    proc(m: RegexMatch2, s: string): string =
+      inc callCount
+      s[m.group(0)] & s[m.group(1)] & ""","SIGKILL")""" & s[m.group(2)],
+  )
+  if callCount > 0:
+    echo "  [OK] fallback call site SIGKILL: " & $callCount & " match(es)"
+    inc patchesApplied
+  else:
     if "Killing utiltiy proccess again" in input:
       echo "  [INFO] Found 'Killing utiltiy proccess again' string in file"
-    echo "  [FAIL] UtilityProcess kill pattern: 0 matches (may need pattern update)"
+    echo "  [FAIL] UtilityProcess fallback kill pattern: 0 matches"
+
+  if patchesApplied < ExpectedPatches:
+    echo "  [FAIL] Only " & $patchesApplied & "/" & $ExpectedPatches &
+      " sub-patches applied (may need pattern update)"
     quit(1)
-  echo "  [OK] UtilityProcess SIGKILL fix: " & $count & " match(es)"
 
 when isMainModule:
   if paramCount() != 1:

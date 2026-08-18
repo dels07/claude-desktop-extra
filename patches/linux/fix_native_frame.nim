@@ -8,19 +8,23 @@
 # gated on a win32-only boolean, and the helper that pushes theme updates is
 # gated the same way.
 #
-# Three patches together do the job:
+# Two patches together do the job:
 #   1. Open the main BrowserWindow with frame:false + a real titleBarOverlay
 #      style object on Linux (plus autoHideMenuBar + icon).
-#   2. Open the setTitleBarOverlay theme-update gate for Linux so the
-#      overlay colors follow Anthropic's `Hb` flag and the OS theme.
-#   3. Force Anthropic's plain window background into the overlay style in
+#   2. Force Anthropic's plain window background into the overlay style in
 #      Linux integrated mode, instead of the value upstream feeds through its
 #      alpha-blend helper. Electron on Wayland has painted that blended value
 #      as a grey strip, so without this swap the overlay looks like a grey
 #      block. (The literal "#00000000" placeholder this originally targeted is
 #      long gone; the swap site is the same style object either way.)
 #
-# All three behaviors gate on CLAUDE_NATIVE_TITLEBAR: unset (or anything
+# (A third sub-patch used to widen upstream's win32-only gate on the
+# setTitleBarOverlay theme-update call. Upstream dropped that gate in
+# v1.13576.0 - the call is unconditional, so Linux windows receive theme
+# updates natively and there is nothing left to inject. The remaining
+# assert-only check was removed at v1.32352.1 per the no-guard policy.)
+#
+# Both behaviors gate on CLAUDE_NATIVE_TITLEBAR: unset (or anything
 # other than "1") = integrated mode; "1" = restore the GTK frame. The
 # launcher's `--native-titlebar` flag sets the env var.
 #
@@ -61,8 +65,9 @@ proc apply*(input: string): string =
   #                                  nativeTheme.shouldUseDarkColors.
   # Both are captured from the main-window options site, which since v1.26832.0
   # lives in index.js itself; they are only ever emitted back into that same
-  # site (patch 1). Patch 3 sits in a *different* code-split chunk and captures
-  # its own local background helper -- see there.
+  # site (patch 1). Patch 2 may sit in a *different* code-split chunk (it did
+  # v1.26832.0-v1.30096.1) and captures its own local background helper --
+  # see there.
   let bgFn = result.capture(
     re2"""backgroundColor:([\w$]+(?:\.[\w$]+)*)\(\),opacity:""",
     "backgroundColor function",
@@ -99,58 +104,17 @@ proc apply*(input: string): string =
     raise newException(ValueError, &"main window pattern: {n}/1")
   echo &"  [OK] main window options: {n}"
 
-  # Patch 2: setTitleBarOverlay theme-update gate.
-  #
-  # Historically upstream guarded the forEach-all-windows call with a
-  # win32-only boolean (e.g. `Io`): `zo&&cA.BrowserWindow.getAllWindows()
-  # .forEach(t=>{try{t.setTitleBarOverlay(e)}...`. We OR'd in Linux
-  # integrated mode so the overlay received theme updates there too.
-  #
-  # v1.13576.0: upstream DROPPED the win32 gate entirely - the call is now
-  # unconditional (`lA.BrowserWindow.getAllWindows().forEach(r=>{try{
-  # r.setTitleBarOverlay(t)}...`), so Linux already receives theme updates.
-  # When we find no win32 gate but DO find the ungated call, that's the new
-  # already-satisfied state and we skip without failing.
-  n = 0
-  result = result.replace(
-    re2"""\b([\w$]+)&&([\w$]+)\.BrowserWindow\.getAllWindows\(\)\.forEach\([\w$]+=>\{[^{]*try\{[\w$]+\.setTitleBarOverlay""",
-    proc(m: RegexMatch2, s: string): string =
-      inc n
-      let platformGate = s[m.group(0)]
-      let electronVar = s[m.group(1)]
-      let restAfterGate = s[m.group(2)]
-      "(" & platformGate & "||(" & LINUX_INTEGRATED & "))&&" & electronVar &
-        ".BrowserWindow.getAllWindows().forEach" & restAfterGate,
-  )
-  if n == 1:
-    echo &"  [OK] setTitleBarOverlay gate: {n} (widened win32 gate for Linux)"
-  elif n == 0:
-    # No win32-gated form. Confirm the ungated call exists (gate removed
-    # upstream -> Linux already covered) before declaring success.
-    var ungated: RegexMatch2
-    let ungatedPat =
-      re2"""\.BrowserWindow\.getAllWindows\(\)\.forEach\([\w$]+=>\{[^{]*try\{[\w$]+\.setTitleBarOverlay"""
-    if result.find(ungatedPat, ungated):
-      echo "  [OK] setTitleBarOverlay gate: removed upstream (call is " &
-        "unconditional; Linux already receives theme updates)"
-    else:
-      raise newException(
-        ValueError, "setTitleBarOverlay: neither gated nor ungated call found"
-      )
-  else:
-    raise newException(ValueError, &"setTitleBarOverlay gate: {n} (expected 0 or 1)")
-
-  # Patch 3: opaque-color swap inside the helper that builds the overlay
+  # Patch 2: opaque-color swap inside the helper that builds the overlay
   # style. The non-Hb branch uses a background value that upstream may run
   # through an alpha-blend helper; on Linux Wayland that has produced a grey
   # strip instead of the window background. Force the plain background color
   # in Linux integrated mode. Two occurrences: one per theme.
   #
-  # Since v1.26832.0 this helper lives in its OWN code-split chunk, separate
-  # from the main-window options patched above. `bgFn` captured up there is a
-  # binding of the index.js chunk and is NOT in scope here -- emitting it would
-  # be a ReferenceError at runtime. Capture the helper's own background
-  # function from the declarator that feeds the style object instead.
+  # This helper can live in a DIFFERENT code-split chunk than the main-window
+  # options patched above (it did v1.26832.0-v1.30096.1). `bgFn` captured up
+  # there would then not be in scope here -- emitting it would be a
+  # ReferenceError at runtime. Capture the helper's own background function
+  # from the declarator that feeds the style object instead.
   let localBg = result.capture(
     re2"""=[\w$]+\?[\w$]+\(([\w$]+)\(\)\):[\w$]+\(\),[\w$]+=[\w$]+\.nativeTheme\.shouldUseDarkColors\?\{color:""",
     "titleBarOverlay-helper background function",

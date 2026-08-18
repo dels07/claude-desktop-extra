@@ -2,6 +2,24 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-18
+
+### Claude Desktop v1.32352.1 - seven patches re-fitted after upstream's bundler switch to Rolldown
+
+The auto-releases for v1.32352.0 and v1.32352.1 (issues #227, #228) failed loudly as designed, on seven patches at once. All seven breaks trace to a single cause: upstream switched its JS bundler to Rolldown, which changed the minified output globally - callbacks passed as call arguments are now parenthesized (`.on(x,(e=>{...}))`) and non-ASCII characters in string literals are emitted as `\uXXXX` escapes instead of raw bytes. No anchor site was refactored away, removed, or upstreamed.
+
+- `fix_computer_use_linux` (9 of 36 sub-patch anchors): re-fitted for both output changes (wrapped arrows plus escaped em-dash needles). Upstream still ships no Linux Computer Use input or screenshot backend - the patch stays load-bearing in full.
+- `fix_quick_entry_cli_toggle`, `fix_quick_entry_ready_wayland`, `fix_quick_entry_wayland_blur_guard`: re-fitted for the wrapped callback arrows; the injected behavior is unchanged and all five quick-entry patches coexist on the new bundle.
+- `fix_renderer_gone_suppressed_log`: upstream split the crash-handler condition into an early-return guard plus a second check, so the suppressed-crash log now covers both silent paths instead of one.
+- `fix_utility_process_kill`: upstream hoisted its kill calls into a `killOrDeferToSpawn()` method but still never hard-kills; the patch now threads a signal parameter through that method and passes `SIGKILL` only at the timeout-fallback call site, as before.
+- `fix_native_frame`: one sub-patch removed - it had been assert-only since v1.13576.0 (upstream's `setTitleBarOverlay` theme update is ungated) and only the minifier's new arrow style broke its match. The patch keeps its two real injections. Patch count stays 43.
+
+The full audit came back clean: no new darwin/win32 gate lacks Linux support, no new native modules, the IPC handler set and the built-in MCP roster are byte-identical to v1.30096.1, the Cowork VM resources are unchanged, and ion-dist re-verified with only content hashes moved. Bundled Electron moved 42.7.0 -> 42.9.2. One new audit trap is documented in the baseline docs: Rolldown emits large numeric object keys unquoted, so a quoted-literal-only flag sweep falsely reports flags as removed.
+
+What upstream added: a flag-gated Remote Control feature (other signed-in devices can start and drive Claude Code sessions on this desktop; the transport shells out to the system `ssh`), import of claude.ai and Chrome browsing data via `node:sqlite`, an `inferenceCredential` auth mode that lets gateway-served plugin marketplaces reuse the 3P bearer, deeper CDP-based control of the Cowork in-app browser, and a session-PR-ownership placeholder capability (unavailable on every platform).
+
+Kept in sync with the release: the Extra -> Deployment panel offers the one new managed-settings key `relocateUncUserData` (Windows-only UNC-share relocation, inert on Linux; 106 keys total); the GrowthBook flag catalog gained 21 flags (189 entries), among them the Remote Control plumbing, two SSH-transport switches, and a browser-tools mouse-guard kill-switch; baseline docs (feature flags, platform gates, built-in MCP, ION) re-validated.
+
 ## 2026-08-14
 
 ### Claude Desktop v1.30096.1 - two patches re-fitted, fix_tray_dbus retired as obsolete

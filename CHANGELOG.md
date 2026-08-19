@@ -2,6 +2,18 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-19
+
+### Claude Desktop v1.32885.1 - zero patch changes; release healed after a CI infrastructure timeout
+
+The v1.32885.1 auto-release (issue #229) failed on a transient GitHub artifact-upload timeout in the arm64 `.deb` job - the package itself had built, patched, and install-tested green. Rerunning the failed job released normally; all 43 patches applied unchanged, with no pattern fixes needed.
+
+The full audit came back clean: no new darwin/win32 gate lacks Linux support, no new native modules, the built-in MCP roster is unchanged, Cowork VM probes are count-identical, and ion-dist re-verified (a partial rebuild - nearly half its chunks carried over byte-identical). The main bundle shrank ~730 KB because upstream replaced its generated per-method eIPC IPC boilerplate (~833 literal `.handle()` registrations) with a table-driven runtime builder - the channel wire format is unchanged and our suffix-matching diff-views hook survives by design, but this compact format also shrank some string anchors the audits count (grandPrix, VirtualMachinePlatform). Bundled Electron stays 42.9.2; renderer fonts switched from ttf to woff2 (new `@ant/typography` dep); the bundled Microsoft 365 MCP server gained a SharePoint search-excerpt-stripping security hardening.
+
+What upstream added: static bootstrap-fetch auth headers plus a headers-helper script for 3P deployments (`bootstrapHeaders`/`bootstrapHeadersHelper`), an `autoContinueAtUsageLimit` setting (wait out the usage-limit reset and continue the session), a POSIX env-name sanitizer in the Claude Code spawn path (runs on Linux, drops malformed env names before spawn), OAuth `private_key_jwt` client assertions for enterprise MCP, friendlier SSH error classification, and the always-supported `coworkSeededSummon` capability (the `bootPlaceholder` stub was removed).
+
+Kept in sync with the release: the Extra -> Deployment panel offers the two new bootstrap-header keys (108 keys total); the GrowthBook flag catalog gained 3 flags and lost 1 to a rename (191 entries: `751369921` renames the hybrid-detect latch, `2099281725` ssh-launch-preconnect, `1477483922` CCD SDK-snapshot staleness); baseline docs (feature flags, platform gates, built-in MCP, ION) re-validated - the platform-gate audit found zero new PORTABLE gates, and ION's platform-enum monitor check was fixed to be location-agnostic after the enum hopped shared chunks again.
+
 ## 2026-08-18
 
 ### Claude Desktop v1.32352.1 - seven patches re-fitted after upstream's bundler switch to Rolldown

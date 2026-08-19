@@ -93,7 +93,7 @@
     "// flags with a switch per flag. It writes claude-desktop-extra.json; entries you",
     "// put here win per flag id, and that panel shows those as locked.",
     "// Every GrowthBook flag observed being read from the feature store in Claude",
-    "// Desktop v1.32352.1 is listed below, commented out. Uncomment a line to force",
+    "// Desktop v1.32885.1 is listed below, commented out. Uncomment a line to force",
     "// it; separate multiple active entries with commas (a trailing comma after the",
     "// last one is fine). true/false for switches; flags marked (value flag)",
     "// carry numbers/strings/objects - a bare true may be meaningless for those.",
@@ -105,7 +105,7 @@
     "// (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this",
     "// file entirely. Active overrides are logged to logs/claude-patches.log.",
     "// Flag IDs are Anthropic-internal and can vanish or change meaning in any",
-    "// release (this list reflects v1.32352.1). If the app misbehaves, empty this",
+    "// release (this list reflects v1.32885.1). If the app misbehaves, empty this",
     "// file first.",
     "{",
     "  // \"activeTheme\": \"mario\",",
@@ -156,6 +156,7 @@
     "    // \"721728391\": true, // inference routing via org policy backend (new in v1.28929.0)",
     "    // \"732695530\": true, // remote-tools-device gate (new in v1.32352.1)",
     "    // \"748063099\": true, // VM client retry on pipe close",
+    "    // \"751369921\": true, // hybrid account detection at startup - latches hybridDetectLatched pref (renames 3001783682) (new in v1.32885.1)",
     "    // \"762798616\": true, // CCD auto-update nudge + check_interval_ticks config (value flag)",
     "    // \"763725229\": true, // Developer menu label/visibility",
     "    // \"770567414\": true, // VM service routing (direct vs persistent pipe)",
@@ -192,6 +193,7 @@
     "    // \"1412563253\": true, // askUserQuestion preview format ('html')",
     "    // \"1434290056\": true, // Dispatch code tasks permission mode - bypass-permissions for dispatch sessions (new in v1.",
     "    // \"1447478638\": true, // LAM scheduled-task auto-permission gate (checked with mdmAutoModeDisabled)",
+    "    // \"1477483922\": true, // CCD gated-SDK-snapshot gate (chipLevel) - gate change marks session SDK snapshots stale (new in v1.32885.1)",
     "    // \"1480778051\": true, // render_rss_bytes memory-telemetry suppression (ON = skip emission)",
     "    // \"1544796833\": true, // session-concurrency limits, e.g. maxConcurrentPerSession (value flag)",
     "    // \"1549258603\": true, // LAM OAuth 401 refresh via resolveSdkOauthToken path",
@@ -224,6 +226,7 @@
     "    // \"2051751800\": true, // Chrome permission-mode skip_all_permission_checks resolver gate",
     "    // \"2051942385\": true, // CIC can-use-tool",
     "    // \"2067027393\": true, // canLaunchCodeSession - launch-a-Code-session suggestion tool for the chat agent",
+    "    // \"2099281725\": true, // ssh-launch-preconnect - SSH host preconnect with failure backoff (new in v1.32885.1)",
     "    // \"2114777685\": true, // cowork onboarding role picker (first-run cowork-onboarding MCP tool)",
     "    // \"2115990222\": true, // artifactsPane feature gate - NEW static registry feature artifactsPane:DPt() where functio",
     "    // \"2140326016\": true, // Author-supplied bin stubs error enforcement",
@@ -260,7 +263,6 @@
     "    // \"2940196192\": true, // coworkArtifacts - Cowork artifacts (list/thumbnails IPC, artifact inference, VM mount)",
     "    // \"2961849615\": true, // revive CCD sessions after relogin",
     "    // \"2979038612\": true, // Session notifications - queueSessionNotification for model switch, folder access",
-    "    // \"3001783682\": true, // hybrid account detection at startup - boot-hold vs idle while awaiting sign-in (new in v1.28929.0)",
     "    // \"3018088575\": true, // local MCP server manager gate, default ON (new in v1.32352.1)",
     "    // \"3045399524\": true, // session config: enabled/alwaysLoad (value flag)",
     "    // \"3046457088\": true, // cowork taskRunFinished permission-resolve routing (new in v1.26832.0)",
@@ -325,7 +327,7 @@
   // rather than keeping a second copy means the .jsonc template and the Extra
   // settings page can never disagree about which flags exist.
   var CATALOG_RE = /^\s*\/\/\s*"(\d+)"\s*:\s*[^,]*,\s*\/\/\s*(.*)$/;
-  var CATALOG_EXPECTED = 189;
+  var CATALOG_EXPECTED = 191;
 
   function flagCatalog() {
     if (catalogCache) return catalogCache;

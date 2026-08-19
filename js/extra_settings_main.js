@@ -337,7 +337,7 @@
     };
   }
 
-  // The managed-config key catalog of Claude Desktop v1.26832.0, read out of the
+  // The managed-config key catalog of Claude Desktop v1.32885.1 (108 keys), read out of the
   // bundle's own schema (flat key, zod leaf type, scopes, title). Upstream drives
   // its 3P Setup wizard from that schema; we cannot reach it from here (it is
   // module-scoped in index.pre.js), so this is a PINNED COPY and is therefore
@@ -588,6 +588,12 @@
       label: "Use the bootstrap config", dflt: true },
     { key: "bootstrapOidc", kind: "json", group: "source", scope: "3p", secret: true,
       label: "Bootstrap OIDC parameters" },
+    { key: "bootstrapHeaders", kind: "json", group: "source", scope: "3p", secret: true,
+      label: "Bootstrap request headers",
+      note: "JSON object of HTTP headers sent on every bootstrap config fetch - use instead of embedding user:pass@ in the URL (upstream gates this @next)." },
+    { key: "bootstrapHeadersHelper", kind: "text", group: "source", scope: "3p",
+      label: "Bootstrap headers helper script",
+      note: "Absolute path to an executable that prints a JSON object of bootstrap headers; merged over the static headers, the helper wins (upstream gates this @next)." },
     { key: "trustBootstrapDelivery", kind: "bool", group: "source", scope: "3p",
       label: "Trust bootstrap-delivered settings",
       note: "Skips the per-user consent prompt for bootstrap-delivered sign-in targets." },

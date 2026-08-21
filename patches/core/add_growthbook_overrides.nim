@@ -66,23 +66,33 @@ proc apply*(input: string): string =
   # separate `let` for the second binding, dotted logger callee):
   #   function tS(e){let t=Mx;Mx=e,Nx=!0;let n=Object.keys(Mx).length,
   #     i=Object.entries(Mx).filter(...).length;r.o.info(`[growthbook] loaded %d features (%d changed)`,n,i)
+  # v1.34493.1 shape: the setter takes a SECOND parameter (a source/status tag,
+  # stored first), the dirty flag is gone, and the stored value now funnels
+  # through a TRANSFORM - the deployment-mode hardcoded-features filter, which
+  # used to be a separate load path calling the setter:
+  #   function Fit(e,t){OS=t;let n=DS;DS=jit(e);let r=Object.keys(DS).length,
+  #     i=Object.entries(DS).filter(...).length;D.info(`[growthbook] loaded %d features (%d changed)`,r,i)
+  # We now wrap the TRANSFORM CALL (`jit(e)`) rather than reassigning the raw
+  # parameter: overrides must apply to the map that is actually STORED, after
+  # the hardcoded-mode filter - same layering as before, when the hardcoded set
+  # itself arrived through the setter's parameter (user override > any rollout).
   if result.contains("=(globalThis.__cdbApplyGbOverrides||"):
     echo "  [OK] features-store setter already hooked"
     inc patchesApplied
   else:
     let setterPat = nre.re(
-      r"""(function [\w$]+\(([\w$]+)\)\{)((?:const|let|var) [\w$]+=[\w$]+;[\w$]+=\2,[\w$]+=!0;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,200}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
+      r"""(function [\w$]+\(([\w$]+),[\w$]+\)\{[\w$]+=[\w$]+;(?:const|let|var) [\w$]+=[\w$]+;[\w$]+=)([\w$]+\(\2\))(;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,200}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
     )
     var hooked = 0
     let m = result.find(setterPat)
     if m.isSome:
       let cap = m.get.captures
-      let head = cap[0]
-      let param = cap[1]
-      let body = cap[2]
+      let head = cap[0]        # "function F(e,t){OS=t;let n=DS;DS="
+      let transformCall = cap[2]  # "jit(e)"
+      let tail = cap[3]        # ";let r=Object.keys(DS).length...loaded %d features..."
       let hook =
-        head & param & "=(globalThis.__cdbApplyGbOverrides||function(x){return x})(" &
-        param & ");" & body
+        head & "(globalThis.__cdbApplyGbOverrides||function(x){return x})(" &
+        transformCall & ")" & tail
       result = result.replace(m.get.match, hook)
       hooked = 1
     if hooked == 1:

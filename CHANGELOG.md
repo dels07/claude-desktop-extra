@@ -2,6 +2,12 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-22
+
+### add_growthbook_overrides re-fitted for Claude Desktop v1.34493.1
+
+Upstream reshaped the features-store setter: it now takes a second (source/status) parameter, drops the dirty flag, and routes the stored value through the deployment-mode hardcoded-features filter, which used to be a separate load path calling the setter. Sub-patch B now wraps that transform call instead of reassigning the raw parameter, so overrides still apply to the map that is actually stored - the same layering as before (user override > any rollout). Anchor unchanged: the `[growthbook] loaded %d features (%d changed)` log line.
+
 ## 2026-08-21
 
 ### Two community-feature fixes: panel tabs revived after a remote claude.ai redeploy, diff-scope dropdown no longer leaks into other panels

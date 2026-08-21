@@ -75,12 +75,21 @@ const paneHtml = (t) => `
 //   chat's shell   position:absolute (inline: top/bottom/left:0, min-width:320px), EMPTY
 //   a side shell   position:static   (no `position` in its inline style at all), 1 pane
 //
+// RE-MEASURED 2026-08-21 (1.32352.1, remote claude.ai redeploy): the chat shell is no
+// longer literally empty. It now carries an `aria-hidden="true"` .epitaxy-view-panel
+// GHOST (no [data-pane-root], no fiber tileId, no close control) alongside the chat UI.
+// That single node is what broke the feature in the field: chatLooksRight()'s
+// "every shell empty of both pane anchors" test failed every frame, no-chat-column
+// warned, and the bar never armed. The fixture therefore ships the ghost - a suite
+// whose chat shell stayed empty would green-light the exact DOM that is broken live.
+//
 // That is the discriminator `chatLooksRight()` uses to tell the chat column from a side
 // wrapper whose pane has not landed yet, so a fixture that gave chat a STATIC shell would
 // be testing a DOM upstream does not produce - and would let a mis-identification pass.
 // The wrappers get `position:relative` because upstream's do (measured inline:
 // `position: relative; min-width: 100px; ...`), which is what contains the absolute shell.
-const CHAT_SHELL = `<div class="tiles-shell" style="position:absolute;top:0;bottom:0;left:0;width:100%;height:100%"></div>`;
+const CHAT_GHOST = `<div class="epitaxy-view-panel rounded-card bg-surface-2" aria-hidden="true" data-test-ghost="">ghost</div>`;
+const CHAT_SHELL = `<div class="tiles-shell" style="position:absolute;top:0;bottom:0;left:0;width:100%;height:100%">${CHAT_GHOST}</div>`;
 const sideShell = (t) => `<div class="tiles-shell" style="height:100%">${paneHtml(t)}</div>`;
 
 // The column row. tiles[0] is expected to be "chat": its column keeps an EMPTY,
@@ -763,6 +772,36 @@ const SINK = 'document.getElementById("__result").textContent = JSON.stringify';
   ok(r.writes === 0 && r.warns === 1,
      "safety: it warns and touches nothing (no layout write of any kind)");
   ok(r.chatVisible === true, "safety: the shared column stays visible");
+}
+{
+  // THE GHOST EXCEPTION MUST NOT WEAKEN THE DECOY DEFENSE (2026-08-21). The chat
+  // shell's aria-hidden view-panel ghost is ignored when testing shell emptiness -
+  // but a NON-hidden .epitaxy-view-panel (e.g. a real pane mid-mount, before its
+  // [data-pane-root] lands) still counts as occupancy. A first-row-child decoy
+  // carrying one, in an otherwise chat-shaped absolute shell, must never be picked
+  // as the chat column - and the REAL (ghost-carrying) chat column must still be.
+  const r = run(withPage(["chat", "diff"], `
+    var P = window.__cdbTabsPage;
+    P.setEnabled(true); P.reconcile(); P.renderBar();
+    var chatMarks = document.querySelectorAll("[data-cdb-chat]");
+    ${SINK}({ chatMarkCount: chatMarks.length,
+      chatMarkOn: chatMarks.length === 1 ? chatMarks[0].getAttribute("data-test-col") : null,
+      active: window.__activeCol(), bar: P.barEl() !== null,
+      decoyTag: document.querySelector('[data-test-col="decoy"]').getAttribute("data-cdb-col"),
+      writes: window.__writes() });`,
+    { wrap: () => `
+      <div class="epitaxy-column" data-test-col="decoy" style="position:relative;flex: 1 1 0%;">
+        <div class="tiles-shell" style="position:absolute;top:0;bottom:0;left:0;width:100%;height:100%">
+          <div class="epitaxy-view-panel">a pane mid-mount - NOT aria-hidden</div>
+        </div>
+      </div>` + columnRow(["chat", "diff"]) }), "ghost-decoy");
+  ok(r.chatMarkCount === 1 && r.chatMarkOn === "chat",
+     "ghost decoy: the chat mark is on the REAL chat column (aria-hidden ghost ignored), " +
+     "never on the decoy whose view panel is not hidden: " + r.chatMarkOn);
+  ok(r.active === "diff" && r.bar === true,
+     "ghost decoy: the feature still arms on the real chat column - a non-hidden " +
+     "view panel disqualifies the decoy without poisoning the pick");
+  ok(r.writes === 0, "ghost decoy: zero layout writes throughout");
 }
 {
   // A side pane with no .tiles-shell ancestor: nothing to resolve, so nothing is

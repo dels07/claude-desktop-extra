@@ -48,8 +48,18 @@
   }
   function panes() {
     var list = document.querySelectorAll(PANE_SELECTOR);
-    if (!list.length) list = document.querySelectorAll(PANE_FALLBACK);
-    return Array.prototype.slice.call(list);
+    if (list.length) return Array.prototype.slice.call(list);
+    // Fallback path only: skip aria-hidden view panels. Upstream renders an
+    // aria-hidden="true" .epitaxy-view-panel GHOST inside the chat shell
+    // (measured 2026-08-21 on 1.32352.1) - it has no fiber tileId, so counting
+    // it here would report a pane that can never resolve and trip the
+    // anchor-rot warning the moment [data-pane-root] goes away.
+    var out = [], all = document.querySelectorAll(PANE_FALLBACK), i;
+    for (i = 0; i < all.length; i++) {
+      if (all[i].getAttribute && all[i].getAttribute("aria-hidden") === "true") continue;
+      out.push(all[i]);
+    }
+    return out;
   }
 
   function tileIdOf(el) {

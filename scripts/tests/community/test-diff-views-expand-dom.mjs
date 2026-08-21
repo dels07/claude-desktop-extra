@@ -121,7 +121,24 @@ const FIXTURES = {
   empty: fixture([], '<div class="diffs-container"></div>'),
   // headers exist but none exposes aria-expanded: nothing has loaded (or the
   // upstream attribute contract changed).
-  nostate: fixture([header("f1", null), header("f2", null)])
+  nostate: fixture([header("f1", null), header("f2", null)]),
+  // The in-app browser panel as an EMPTY "New tab": a real .epitaxy-view-panel
+  // with a chrome row and close control, ZERO diff markers, and - crucially - no
+  // iframe/webview yet, so the negative surface check cannot tell it from an
+  // emptied diff. Measured live 2026-08-21 (Claude Desktop 1.32352.1): with
+  // Branch changes applied, exactly this shape carried our dropdown
+  // (wrapperTileId=preview, hasDiffMarkers=false, nonDiffSurface=false,
+  // ourDropdown=true). The only honest discriminator is the React fiber's
+  // memoizedProps.tileId, which the "leak" scenario wires the same way the live
+  // page carries it (observed at hops 3-5 above the view-panel node).
+  browser: `
+<div class="epitaxy-view-panel" id="view">
+  <div class="chromerow" id="row">
+    <span class="crumb" id="crumb">New tab</span>
+    <button type="button" id="close" class="epitaxy-pane-close-control shrink-0 text-t5" aria-label="Close" title="Close panel"><svg viewBox="0 0 16 16"><path d="M2 2l12 12"/></svg></button>
+  </div>
+  <div class="browserbody" id="browserbody"></div>
+</div>`
 };
 
 // --- the in-page test driver ----------------------------------------------
@@ -680,6 +697,67 @@ async function run() {
      "still gone a sweep later - the install loop does not put one back into a " +
      "view that does not qualify");
 }`,
+  // THE DROPDOWN LEAK (2026-08-21, measured live on 1.32352.1): with a
+  // non-working scope applied, the diff-scope dropdown mounted in the in-app
+  // browser panel's chrome row - and in the Files panel the same way. Unlike
+  // DEFECT B this is a genuine MIS-INSTALL, not a stale leftover: an empty "New
+  // tab" has no iframe yet, so qualifiesAsEmptyDiffView's negative surface check
+  // passes and the mode gate is open because the user really did apply Branch
+  // changes (in the diff panel). The fix is a POSITIVE identity gate: the fiber's
+  // memoizedProps.tileId must say "diff" before the empty-diff fallback fires.
+  // A null tileId (unreadable fiber) falls back to the old gates so the
+  // dead-end rescue survives a React internals change.
+  leak: String.raw`
+async function run() {
+  var view = document.getElementById("view");
+  // The fiber, shaped as measured live: tileId sits on an ANCESTOR fiber node,
+  // not on the element's own memoizedProps.
+  var FIBER = "__reactFiber$leaktest";
+  view[FIBER] = { memoizedProps: {}, return: { memoizedProps: { tileId: "preview" }, return: null } };
+
+  ok(document.querySelectorAll(".cdb-dv-select").length === 0,
+     "precondition: a marker-less browser panel gets nothing in Working tree");
+
+  // The user applies Branch changes (in the real diff panel elsewhere): main's
+  // effective mode goes non-working, which is GATE 1 of the empty-diff fallback.
+  window.__stubMode = "branch";
+  await sleep(150);                        // several 10ms pref polls + the mode-change sweep
+  view.appendChild(document.createElement("span"));
+  await sleep(900);                        // one debounced sweep
+  ok(document.querySelectorAll(".cdb-dv-select").length === 0,
+     "LEAK GUARD: an empty in-app browser tab (no iframe, tileId=preview) gets NO " +
+     "dropdown even with a non-working scope applied: " +
+     document.querySelectorAll(".cdb-dv-select").length);
+
+  // The dead-end rescue must SURVIVE the fix: the same zero-marker shape whose
+  // fiber says tileId=diff IS the diff view our own scope emptied, and without a
+  // dropdown there is no way back to Working tree.
+  view[FIBER].return.memoizedProps.tileId = "diff";
+  view.appendChild(document.createElement("span"));
+  await sleep(900);
+  ok(document.querySelectorAll(".cdb-dv-select").length === 1,
+     "the emptied DIFF view (tileId=diff, zero markers) still gets its dropdown: " +
+     document.querySelectorAll(".cdb-dv-select").length);
+
+  // Upstream hands this row to the browser tile again: the re-validation sweep
+  // must now strip the dropdown off it (this is the exact live state measured
+  // 2026-08-21 - ourDropdown:true on tileId=preview).
+  view[FIBER].return.memoizedProps.tileId = "preview";
+  view.appendChild(document.createElement("span"));
+  await sleep(900);
+  ok(document.querySelectorAll(".cdb-dv-select").length === 0,
+     "re-validation strips the dropdown once the fiber identity stops being diff: " +
+     document.querySelectorAll(".cdb-dv-select").length);
+
+  // And with the fiber UNREADABLE the old gates still carry the rescue: an
+  // emptied diff whose fiber upstream renamed must not become a dead end.
+  delete view[FIBER];
+  view.appendChild(document.createElement("span"));
+  await sleep(900);
+  ok(document.querySelectorAll(".cdb-dv-select").length === 1,
+     "null tileId falls back to the legacy gates - the dead-end rescue outlives " +
+     "a React internals rename: " + document.querySelectorAll(".cdb-dv-select").length);
+}`,
   destroy: String.raw`
 async function run() {
   var t = toggle();
@@ -768,8 +846,12 @@ window.__diag = [];
 window.__cdbDvTestPollMs = 10;   // TEST-ONLY override documented in diff_views_page.js
 window.cdbDiffViews = {
   state: function () {
+    // __stubMode lets a scenario apply a non-working scope the way the real main
+    // process would report one (the "leak" scenario needs Branch changes active
+    // to open the qualifiesAsEmptyDiffView gate). Default unchanged: working.
     return Promise.resolve({ ok: true, available: true, isGitRepo: true,
-                             enabled: true, mode: "working", hasTurnSnapshot: false });
+                             enabled: true, mode: window.__stubMode || "working",
+                             hasTurnSnapshot: false });
   },
   setMode: function () { return Promise.resolve({ ok: true, nudged: true }); }
 };
@@ -846,7 +928,8 @@ const scenarios = [
   ["reattach", FIXTURES.mixed, RUNS.reattach, null],
   ["fullscreen", FIXTURES.mixed, RUNS.fullscreen, null],
   ["destroy", FIXTURES.mixed, RUNS.destroy, null],
-  ["stale", FIXTURES.mixed, RUNS.stale, null]
+  ["stale", FIXTURES.mixed, RUNS.stale, null],
+  ["leak", FIXTURES.browser, RUNS.leak, null]
 ];
 
 let pass = 0;

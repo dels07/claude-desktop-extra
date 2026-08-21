@@ -1,6 +1,12 @@
 # Panel tabs - upstream anchor inventory
 
 **Validated against Claude Desktop 1.24012.9** (2026-08-06).
+**Re-validated live over CDP on 1.32352.1** (2026-08-21) after a remote claude.ai redeploy
+broke A1: the chat column's absolute shell now contains an `aria-hidden="true"`
+`.epitaxy-view-panel` GHOST (no `[data-pane-root]`, no fiber `tileId`, no chrome row). The
+discriminator now ignores aria-hidden view panels when testing shell emptiness - see A1.
+The redeploy also introduced a `dframe-*` app shell around the epitaxy area and a new
+`runs` tile id in the side-pane store; neither affects any anchor below.
 
 Everything the panel-tabs feature reaches into remote claude.ai markup or its React
 fiber. Re-validate this list on every upstream bump: a green build proves the Nim
@@ -57,7 +63,7 @@ the *feature* stops working until the assumption is re-established.
 
 | # | Assumption | Where | Expected on 1.24012.9 | If it breaks |
 |---|---|---|---|---|
-| A1 | **The empty, ABSOLUTELY POSITIONED shell.** The chat column is the row child that owns ≥ 1 `.tiles-shell`, whose shells are **all empty** (no `[data-pane-root]` / `.epitaxy-view-panel` in any of them), of which **≥ 1 is `position: absolute`**, and which is not one of our tagged columns. Exactly one row child may qualify - two ⇒ refuse. The pick is then **held** (`stickyChat`) and re-decided only when the held element stops qualifying | `panel_tabs_page.js` - `chatLooksRight`, `stickyChatOk`, `chatColumnOf`, `looksLikeRow` | row children `chat, .tiles-handle, STACK(diff,terminal), .tiles-handle, STACK(preview,tasks)`; shells/shells-with-a-pane = chat **1/0**, handles **0/–**, each stack **2/2** (1 empty shell of 5 document-wide). **Position: chat's shell `absolute`** (inline `position:absolute;top/bottom/left:0;min-width:320px`), all four side shells `static` with a byte-identical inline style carrying no `position` | No single qualifying chat column ⇒ refuse to arm, warn `no-chat-column`, drop our bar, leave upstream's split. If a side shell ever becomes `absolute` (or chat's `static`) the discriminator weakens - stickiness bounds that to the first identification. Fix `chatLooksRight` |
+| A1 | **The "empty", ABSOLUTELY POSITIONED shell.** The chat column is the row child that owns ≥ 1 `.tiles-shell`, whose shells are **all empty** - no `[data-pane-root]`, and no `.epitaxy-view-panel` **that is not `aria-hidden="true"`** - of which **≥ 1 is `position: absolute`**, and which is not one of our tagged columns. Exactly one row child may qualify - two ⇒ refuse. The pick is then **held** (`stickyChat`) and re-decided only when the held element stops qualifying. **The aria-hidden exception is load-bearing since 2026-08-21:** a remote redeploy put an `aria-hidden="true"` `.epitaxy-view-panel` ghost inside the chat shell (no pane root, no fiber `tileId`, no chrome), which made the plain emptiness test fail every frame and killed the feature. A REAL pane never carries `aria-hidden="true"` (checked live: diff/preview do not) | `panel_tabs_page.js` - `chatLooksRight`, `stickyChatOk`, `chatColumnOf`, `looksLikeRow` | 1.24012.9: row children `chat, .tiles-handle, STACK(diff,terminal), .tiles-handle, STACK(preview,tasks)`; shells/shells-with-a-pane = chat **1/0**, handles **0/–**, each stack **2/2**. 1.32352.1 (live 2026-08-21): row children `chat(826px), .tiles-handle(12px), STACK(diff,preview)(957px)`; chat's shell `absolute` holding ONLY the ghost + the chat UI (composer measured inside it), side shells `static` with 1 pane each | No single qualifying chat column ⇒ refuse to arm, warn `no-chat-column`, drop our bar, leave upstream's split. If a side shell ever becomes `absolute` (or chat's `static`) the discriminator weakens - stickiness bounds that to the first identification. If upstream ever ships a REAL pane with `aria-hidden="true"`, or drops the ghost's `aria-hidden`, re-derive. Fix `chatLooksRight` |
 | A2 | **Nesting depth.** Leaf wrapper → row is at most `MAX_CHAIN_HOPS = 12` parent hops | `panel_tabs_page.js` - `resolveChain` | 2 hops for a tile inside a stack, 1 for a row-level tile | Row unresolvable ⇒ hide nothing, warn `no-row`. Raise the budget |
 | A3 | **The literal tile id `"chat"`.** Used to separate the chat pane from side panes | `panel_tabs_page.js` - `isNonChatPane`, `resolveColumns`; `panel_tabs_layout.js` - `sideTileIds`, `geometry` | `tid(chatPane) === "chat"` | The chat tile counts as a side panel ⇒ it gets a tab and can be hidden. Grep the literal and update |
 
@@ -73,7 +79,7 @@ that menu; nothing reads them now.
 
 | Anchor | Where | Expected on 1.24012.9 |
 |---|---|---|
-| `[data-pane-root]`, fallback `.epitaxy-view-panel` | `harvest.panes` | present on every pane |
+| `[data-pane-root]`, fallback `.epitaxy-view-panel` (fallback skips `aria-hidden="true"` ghosts since 2026-08-21) | `harvest.panes` | present on every pane; the chat shell's ghost carries NEITHER a pane root nor a resolvable `tileId` |
 | `memoizedProps.tileId` on an ancestor fiber, searched not hop-counted | `harvest.tileIdOf` | observed at hops 1 / 39 / 51 - never hardcode |
 | `.tiles-shell` (one per column; a bare query returns the CHAT column's, which is empty) | page `SHELL_SELECTOR` | one per column; see A1 for the position split |
 | `.tiles-handle` resize dividers, `role="separator"` | page `HANDLE_SELECTOR` | row: vertical 12 px; in-stack: horizontal 12 px |

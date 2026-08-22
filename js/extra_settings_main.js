@@ -514,6 +514,8 @@
       label: "Allow user-added MCP servers", dflt: true },
     { key: "mcpPersistentAlwaysAllowEnabled", kind: "bool", group: "connectors", scope: "3p",
       label: "Allow persistent tool approvals", dflt: true },
+    { key: "claudeInChromeEnabled", kind: "bool", group: "connectors", scope: "3p",
+      label: "Enable Claude in Chrome" },
     { key: "isDesktopExtensionEnabled", kind: "bool", group: "connectors", scope: "both",
       label: "Allow desktop extensions" },
     { key: "isDesktopExtensionSignatureRequired", kind: "bool", group: "connectors", scope: "both",

@@ -339,6 +339,7 @@ scripts/           # Build, validation, and launcher scripts (ls scripts/)
 scripts/tests/     # Feature test harnesses, grouped like patches/ (run: scripts/run-feature-tests.sh)
 scripts/tests/community/ #   Behavior tests for the opt-in community features (5)
 scripts/tests/core/      #   Behavior tests for the core infrastructure features (5)
+scripts/tests/linux/     #   Behavior tests for the Linux compatibility patches (1)
 scripts/tests/lib/       #   Shared harness plumbing (theme-engine-harness.mjs), not tests themselves
 docs/              # Per-feature deep-dives (themes, profiles, quick-entry, cowork, feature-flags,
                    #   computer-use, third-party-inference, environment-variables) + screenshots.

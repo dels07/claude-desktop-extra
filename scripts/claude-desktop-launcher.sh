@@ -1127,6 +1127,29 @@ _diagnose() {
             fi
         fi
     fi
+    if [[ "$(printf %s "${XDG_CURRENT_DESKTOP:-}" | tr '[:upper:]' '[:lower:]')" == *gnome* ]] \
+        && [[ "${XDG_SESSION_TYPE:-}" == 'wayland' || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        echo "GNOME Shell = $(timeout 2 gnome-shell --version 2>/dev/null || echo '(probe failed)')"
+        echo "PipeWire = $(timeout 2 pipewire --version 2>/dev/null | head -1 || echo '(probe failed)')"
+        # Portal-free monitor enumeration: the same `screens` call the screenshot
+        # path makes before every capture, and the first thing to hang when the
+        # bridge cannot talk to Mutter (issue #232). Never pops a consent dialog.
+        # session-start is deliberately NOT probed here - it would.
+        if [[ -x "$_cu_res/gnome-portal-bridge" ]]; then
+            local _gs_out _gs_rc=0 _gs_t0 _gs_ms
+            _gs_t0=$(date +%s%3N)
+            _gs_out="$(timeout 10 "$_cu_res/gnome-portal-bridge" screens 2>&1)" || _gs_rc=$?
+            _gs_ms=$(( $(date +%s%3N) - _gs_t0 ))
+            if [[ "$_gs_rc" == 0 ]]; then
+                echo "gnome-portal-bridge screens = ok (${#_gs_out} bytes, ${_gs_ms}ms)"
+                printf '%s\n' "$_gs_out" | head -5 | sed 's/^/  /'
+            else
+                echo "gnome-portal-bridge screens = FAILED (exit $_gs_rc after ${_gs_ms}ms)"
+                printf '%s\n' "$_gs_out" | head -5 | sed 's/^/  /'
+                echo '  (exit 124 = timed out. Computer Use capture cannot work until this succeeds.)'
+            fi
+        fi
+    fi
     echo
     echo '--- Cowork VM capability (replicates the app probe) ---'
     # Mirrors the native Cowork backend's capability probe. If any of qemuPath /

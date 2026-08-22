@@ -20,6 +20,31 @@
 > <a id="custom-screenshot-command"></a>
 > **Custom screenshot command:** set `COWORK_SCREENSHOT_CMD` to override auto-detection. Placeholders: `{FILE}`, `{X}`, `{Y}`, `{W}`, `{H}`. Example: `COWORK_SCREENSHOT_CMD='spectacle -b -n -r -o {FILE}'`
 
+<a id="bridge-not-working"></a>
+## When the bundled bridge cannot talk to your session
+
+On a covered session the bridge is the only backend - there is deliberately no
+third-party cascade behind it, and no X11 fallback either (under a rootless
+XWayland server the X root window holds nothing, so an X11 screenshot there can
+only answer `BadMatch`). If the bridge stops answering, Computer Use fails
+instead of quietly returning a black or mis-cropped image.
+
+It fails **fast**: a failed portal session is remembered for 60 seconds, so
+input and capture return an error immediately rather than blocking on the bridge
+again. The screenshot path never blocks the app at all.
+
+To find out why, run the diagnostics:
+
+```bash
+claude-desktop --diagnose        # the "Computer Use" section self-tests the bridge
+grep -a 'claude-cu' ~/.config/Claude/logs/claude-patches.log
+```
+
+On GNOME Wayland `--diagnose` runs the bridge's portal-free `gnome-portal-bridge
+screens` call with a timer. If that reports `FAILED` (or `exit 124` = timed out),
+capture cannot work until it succeeds - the bridge is not reaching Mutter.
+`COWORK_SCREENSHOT_CMD` overrides the screenshot path in the meantime.
+
 <a id="ydotool-setup"></a>
 ## ydotool (exotic Wayland compositors only)
 

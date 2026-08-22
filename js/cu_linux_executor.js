@@ -55,12 +55,21 @@ function _x11Bridge(args){
   var out=res.trim();
   return out?_parseBridgeJson("x11-bridge",out):null;
 }
+// Async twin of _x11Bridge. The SCREENSHOT path is async end to end (issue
+// #232) - a hung bridge there must never block the Electron main process.
+function _x11BridgeAsync(args,timeoutMs){
+  var bin=_x11BridgeBin();
+  if(!bin)return Promise.reject(new Error("x11-bridge not available (globalThis.__cuX11BridgeBin unset — set X11_BRIDGE_BIN or reinstall the package - the bundled bridge is missing)"));
+  return _execFileAsync("x11-bridge",bin,args,timeoutMs||15000);
+}
 // Bridge-side monitor list (RandR names + root-window geometry). Used to map a
 // root-coordinate region to a monitor name + monitor-relative coords for `zoom`.
+// ASYNC: only ever reached from _captureRegion, which is async. Negatively
+// cached, so a broken bridge costs the timeout once per process, not per shot.
 var _x11ScreensCache=null;
-function _x11BridgeScreens(){
+async function _x11BridgeScreens(){
   if(_x11ScreensCache!==null)return _x11ScreensCache;
-  try{var s=_x11Bridge(["screens"]);_x11ScreensCache=Array.isArray(s)?s:[]}catch(e){globalThis.__cdbDiag("[claude-cu] x11-bridge screens failed: "+(e.message||e));_x11ScreensCache=[]}
+  try{var s=await _x11BridgeAsync(["screens"],SCREENS_TIMEOUT_MS);_x11ScreensCache=Array.isArray(s)?s:[]}catch(e){globalThis.__cdbDiag("[claude-cu] x11-bridge screens failed: "+(e.message||e));_x11ScreensCache=[]}
   return _x11ScreensCache;
 }
 // ── Generic bridge invoker for the Wayland first-party backends ──
@@ -74,20 +83,59 @@ function _bridge(bin,args,timeoutMs){
   var out=res.trim();
   return out?_parseBridgeJson(bin,out):null;
 }
+// Shared promisified execFile for every ASYNC bridge call (issue #232). Same
+// contract as _bridge/_x11Bridge: one JSON value on stdout, exit 1 + stderr on
+// error; label names the bridge in the parse error.
+function _execFileAsync(label,bin,args,timeoutMs){
+  return new Promise(function(resolve,reject){
+    _cp.execFile(bin,args,{encoding:"utf-8",timeout:timeoutMs||15000,maxBuffer:16*1024*1024},function(err,stdout){
+      if(err){reject(err);return}
+      var out=(stdout||"").trim();
+      try{resolve(out?_parseBridgeJson(label,out):null)}catch(pe){reject(pe)}
+    });
+  });
+}
 // Async, non-blocking variant of _bridge. Used ONLY for the GNOME portal
 // session lifecycle (session-start/session-end), because session-start blocks
 // on the XDG RemoteDesktop consent dialog for up to timeoutMs — a synchronous
 // execFileSync there would freeze the Electron main process while the dialog is
 // pending. Mirrors the kwin executor's promisified execFile (executor_linux.js).
 function _bridgeAsync(bin,args,timeoutMs){
-  return new Promise(function(resolve,reject){
-    if(!bin){reject(new Error("bridge binary not available"));return}
-    _cp.execFile(bin,args,{encoding:"utf-8",timeout:timeoutMs||15000,maxBuffer:16*1024*1024},function(err,stdout){
-      if(err){reject(err);return}
-      var out=(stdout||"").trim();
-      try{resolve(out?_parseBridgeJson(bin,out):null)}catch(pe){reject(pe)}
-    });
-  });
+  if(!bin)return Promise.reject(new Error("bridge binary not available"));
+  return _execFileAsync(bin,bin,args,timeoutMs);
+}
+// ── Blocking budget (issue #232) ────────────────────────────────────────────
+// Every SYNC bridge call freezes the whole Electron main process for its full
+// timeout; the OS shows "Not Responding" well before 30 s. These constants cap
+// what a broken bridge can cost on the synchronous input path. The screenshot
+// path does not use them at all any more - it is async end to end.
+//   SCREENS_TIMEOUT_MS      portal-free monitor enumeration; a plain D-Bus /
+//                           RandR query that takes longer than this is broken.
+//   GNOME_SYNC_START_MS     the sync session-start BACKSTOP only. The consent
+//                           dialog belongs to the ASYNC lock-hook path, which
+//                           keeps the full GNOME_SESSION_START_MS budget; the
+//                           backstop only exists for a portal command that beat
+//                           the lock hook, so it must not sit on a user's click.
+//   GNOME_SESSION_START_MS  async session-start, may wait out a consent dialog.
+var SCREENS_TIMEOUT_MS=5000;
+var GNOME_SYNC_START_MS=8000;
+var GNOME_SESSION_START_MS=30000;
+// PORTAL FAILURE LATCH. Before this, a failed session-start left no memo: every
+// subsequent portal command re-ran the full blocking session-start and then the
+// command itself, so one click could block the main process for two minutes and
+// every following click did it again. Now a failure is remembered for a cooldown
+// and portal commands fail fast (and legibly) until it lapses. A fresh CU lock
+// clears it - a new user gesture deserves a real retry, consent dialog included.
+var GNOME_PORTAL_COOLDOWN_MS=60000;
+var _gnomePortalDownUntil=0;
+function _gnomePortalDown(){return Date.now()<_gnomePortalDownUntil}
+function _gnomePortalMarkDown(why){
+  _gnomePortalDownUntil=Date.now()+GNOME_PORTAL_COOLDOWN_MS;
+  globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge portal session unavailable ("+why+") - portal commands fail fast for "+Math.round(GNOME_PORTAL_COOLDOWN_MS/1000)+"s instead of blocking the main process");
+}
+function _gnomePortalClearDown(){_gnomePortalDownUntil=0}
+function _gnomePortalDownError(){
+  return new Error("gnome-portal-bridge portal session unavailable - session-start failed within the last "+Math.round(GNOME_PORTAL_COOLDOWN_MS/1000)+"s, so Computer Use input/capture cannot run on this GNOME Wayland session. Run `"+(_gnomeBridgeBin()||"gnome-portal-bridge")+" session-start` in a terminal to see why, and check ~/.config/Claude/logs/claude-patches.log.");
 }
 // Return {bin, name, timeout} for the active covered Wayland session, or null.
 function _wlBridge(){
@@ -107,12 +155,37 @@ var _gnomePortalCmds={"zoom":1,"screenshot":1,"pointer-move":1,"pointer-click":1
 function _wlBridgeCall(args){
   var b=_wlBridge();if(!b)throw new Error("no covered Wayland bridge available");
   var portalCmd=b.name==="gnome-portal-bridge"&&_gnomePortalCmds[args[0]]===1;
-  if(portalCmd)_gnomeEnsureSessionSync();
+  // A portal command with no portal session behind it can only fail. Running it
+  // anyway costs another full blocking timeout, so refuse while latched down.
+  if(portalCmd){
+    if(!_gnomeSessionActive&&_gnomePortalDown())throw _gnomePortalDownError();
+    _gnomeEnsureSessionSync();
+    // The backstop may have just discovered the portal is down. Re-check the
+    // LATCH (not merely "session not active" - an async start may still be in
+    // flight, and that case keeps the old behaviour of letting the bridge
+    // decide). Running a portal command against a session that failed to start
+    // buys nothing and costs another full blocking timeout on top.
+    if(!_gnomeSessionActive&&_gnomePortalDown())throw _gnomePortalDownError();
+  }
   // Portal-proxied commands keep the generous gnome timeout; portal-free
   // enumeration gets the standard bridge timeout so a stuck D-Bus call can
   // never block the main process for the full portal budget.
   var t=b.name==="gnome-portal-bridge"&&!portalCmd?15000:b.timeout;
   return _bridge(b.bin,args,t);
+}
+// ASYNC twin of _wlBridgeCall, used by the screenshot path (issue #232). Same
+// portal rules, but it AWAITS the async session ensure instead of running the
+// blocking sync backstop, so a hung portal cannot freeze the main process.
+async function _wlBridgeCallAsync(args,timeoutOverrideMs){
+  var b=_wlBridge();if(!b)throw new Error("no covered Wayland bridge available");
+  var portalCmd=b.name==="gnome-portal-bridge"&&_gnomePortalCmds[args[0]]===1;
+  if(portalCmd){
+    if(!_gnomeSessionActive&&_gnomePortalDown())throw _gnomePortalDownError();
+    await _gnomeEnsureSession();
+    if(!_gnomeSessionActive)throw _gnomePortalDownError();
+  }
+  var t=timeoutOverrideMs||(b.name==="gnome-portal-bridge"&&!portalCmd?15000:b.timeout);
+  return _execFileAsync(b.name,b.bin,args,t);
 }
 // Synchronous session-start backstop for the per-call input/capture path: these
 // callers run the bridge synchronously and need the portal session up FIRST.
@@ -122,25 +195,30 @@ function _wlBridgeCall(args){
 // having fired — and by then a consent dialog is expected UX anyway (the user
 // invoked Computer Use).
 function _gnomeEnsureSessionSync(){
-  if(_gnomeSessionActive||_gnomeSessionStarting)return;
-  var bin=_gnomeBridgeBin();if(!bin)return;
+  if(_gnomeSessionActive||_gnomeSessionStarting)return _gnomeSessionActive;
+  if(_gnomePortalDown())return !1;
+  var bin=_gnomeBridgeBin();if(!bin)return !1;
   if(!_gnomeExitHooked){_gnomeExitHooked=!0;process.once("exit",function(){if(_gnomeSessionActive){try{_cp.execFileSync(_gnomeBridgeBin(),["session-end"],{timeout:5000,stdio:"ignore"})}catch(e){}}})}
-  try{_bridge(bin,["session-start"],30000);_gnomeSessionActive=!0;globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session started (sync backstop)")}
-  catch(e){globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session-start failed (sync backstop): "+(e.message||e))}
+  try{_bridge(bin,["session-start"],GNOME_SYNC_START_MS);_gnomeSessionActive=!0;_gnomePortalClearDown();globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session started (sync backstop)");return !0}
+  catch(e){globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session-start failed (sync backstop): "+(e.message||e));_gnomePortalMarkDown("sync backstop session-start failed");return !1}
 }
 // Bridge-side monitor list (snake_case screens) for the active Wayland bridge.
 // Mirrors _x11BridgeScreens; used to map a global-logical region to a monitor
 // name + monitor-relative coords for `zoom --display`.
 var _wlScreensCache=null;
-function _wlBridgeScreens(){
+async function _wlBridgeScreens(){
   if(_wlScreensCache!==null)return _wlScreensCache;
-  try{var s=_wlBridgeCall(["screens"]);_wlScreensCache=Array.isArray(s)?s:[]}catch(e){globalThis.__cdbDiag("[claude-cu] "+(_wlBridge()?_wlBridge().name:"bridge")+" screens failed: "+(e.message||e));_wlScreensCache=[]}
+  try{var s=await _wlBridgeCallAsync(["screens"],SCREENS_TIMEOUT_MS);_wlScreensCache=Array.isArray(s)?s:[]}catch(e){globalThis.__cdbDiag("[claude-cu] "+(_wlBridge()?_wlBridge().name:"bridge")+" screens failed: "+(e.message||e));_wlScreensCache=[]}
+  // An empty monitor list means the region below is sent in GLOBAL logical
+  // coordinates with no --display, which is wrong on any multi-monitor layout.
+  // Say so once instead of silently returning a mis-cropped image (issue #232).
+  if(!_wlScreensCache.length)globalThis.__cdbDiag("[claude-cu] no bridge monitor list - zoom will use global coordinates with no --display (multi-monitor captures will be wrong)");
   return _wlScreensCache;
 }
 // Map a global-logical region to the bridge monitor containing its top-left,
 // returning {name, x, y} with monitor-relative x/y (mirrors _x11MonForRegion).
-function _wlMonForRegion(x,y){
-  var screens=_wlBridgeScreens();
+async function _wlMonForRegion(x,y){
+  var screens=await _wlBridgeScreens();
   if(!screens.length)return null;
   var pick=null;
   for(var i=0;i<screens.length;i++){var g=screens[i].geometry||{};if(x>=g.x&&x<g.x+g.width&&y>=g.y&&y<g.y+g.height){pick=screens[i];break}}
@@ -160,8 +238,8 @@ function _wlMonForRegion(x,y){
 var _gnomeSessionActive=!1,_gnomeExitHooked=!1,_gnomeSessionStarting=null;
 async function _gnomeSessionStart(){
   var bin=_gnomeBridgeBin();if(!bin)return;
-  try{await _bridgeAsync(bin,["session-start"],30000);_gnomeSessionActive=!0;globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session started")}
-  catch(e){globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session-start failed: "+(e.message||e))}
+  try{await _bridgeAsync(bin,["session-start"],GNOME_SESSION_START_MS);_gnomeSessionActive=!0;_gnomePortalClearDown();globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session started")}
+  catch(e){globalThis.__cdbDiag("[claude-cu] gnome-portal-bridge session-start failed: "+(e.message||e));_gnomePortalMarkDown("session-start failed")}
 }
 async function _gnomeSessionEnd(){
   var bin=_gnomeBridgeBin();if(!bin)return;
@@ -174,6 +252,9 @@ async function _gnomeSessionEnd(){
 function _gnomeEnsureSession(){
   if(_gnomeSessionActive)return Promise.resolve();
   if(_gnomeSessionStarting)return _gnomeSessionStarting;
+  // A fresh lock is a fresh user gesture: give the portal a real retry (consent
+  // dialog and all) rather than inheriting the previous session's cooldown.
+  _gnomePortalClearDown();
   if(!_gnomeExitHooked){_gnomeExitHooked=!0;process.once("exit",function(){if(_gnomeSessionActive){try{_cp.execFileSync(_gnomeBridgeBin(),["session-end"],{timeout:5000,stdio:"ignore"})}catch(e){}}})}
   _gnomeSessionStarting=_gnomeSessionStart().then(function(){_gnomeSessionStarting=null},function(){_gnomeSessionStarting=null});
   return _gnomeSessionStarting;
@@ -187,8 +268,8 @@ function _findMonByPoint(px,py){
 }
 // Map a root-coordinate region to the bridge monitor that contains its top-left,
 // returning {name, x, y} where x/y are monitor-relative. Falls back to primary/first.
-function _x11MonForRegion(x,y){
-  var screens=_x11BridgeScreens();
+async function _x11MonForRegion(x,y){
+  var screens=await _x11BridgeScreens();
   if(!screens.length)return null;
   var pick=null;
   for(var i=0;i<screens.length;i++){
@@ -239,10 +320,10 @@ async function _captureRegion(x,y,w,h,sf){
   if(_wlb){
     try{
       var _lx=Math.round(x/(sf||1)),_ly=Math.round(y/(sf||1)),_lw=Math.round(w/(sf||1)),_lh=Math.round(h/(sf||1));
-      var _wmr=_wlMonForRegion(_lx,_ly);
+      var _wmr=await _wlMonForRegion(_lx,_ly);
       var _wzargs=["zoom","--x",String(_wmr?_wmr.x:_lx),"--y",String(_wmr?_wmr.y:_ly),"--w",String(_lw),"--h",String(_lh)];
       if(_wmr&&_wmr.name){_wzargs.push("--display",_wmr.name)}
-      var _wzr=_wlBridgeCall(_wzargs);
+      var _wzr=await _wlBridgeCallAsync(_wzargs);
       if(_wzr&&_wzr.base64){globalThis.__cdbDiag("[claude-cu] screenshot: captured via "+_wlb.name);return{base64:_wzr.base64,imgW:_wzr.width||w,imgH:_wzr.height||h,mimeType:"image/jpeg"}}
     }catch(e){globalThis.__cdbDiag("[claude-cu] "+_wlb.name+" zoom failed: "+(e.message||e))}
     // Covered session with a resolved bridge: do NOT fall through to deleted
@@ -260,13 +341,19 @@ async function _captureRegion(x,y,w,h,sf){
   // (the DOWNSCALED emitted dims). We translate the root region to the containing
   // RandR monitor + monitor-relative coords, since the bridge's `zoom --display
   // <name>` expects monitor-relative x/y.
-  if(!_wayland||_x11BridgeBin()){
+  // NOT on a covered Wayland session: x11-bridge captures the X root, and under
+  // a rootless XWayland server that root holds nothing - GetImage answers with
+  // BadMatch (exactly what issue #232 reported). Trying it there costs another
+  // blocking timeout and buries the real bridge failure under an X11 protocol
+  // error, so the covered path goes straight to the desktopCapturer last resort.
+  // This is what the diagnostics line has always advertised (`!_covered` there).
+  if(!_wlb&&(!_wayland||_x11BridgeBin())){
     if(_x11BridgeBin()){
       try{
-        var _mr=_x11MonForRegion(x,y);
+        var _mr=await _x11MonForRegion(x,y);
         var _zargs=["zoom","--x",String(_mr?_mr.x:x),"--y",String(_mr?_mr.y:y),"--w",String(w),"--h",String(h)];
         if(_mr&&_mr.name){_zargs.push("--display",_mr.name)}
-        var _zr=_x11Bridge(_zargs);
+        var _zr=await _x11BridgeAsync(_zargs);
         if(_zr&&_zr.base64){globalThis.__cdbDiag("[claude-cu] screenshot: captured via x11-bridge"+(_wayland?" (XWayland)":""));return{base64:_zr.base64,imgW:_zr.width||w,imgH:_zr.height||h,mimeType:"image/jpeg"}}
       }catch(e){globalThis.__cdbDiag("[claude-cu] x11-bridge zoom failed: "+(e.message||e))}
     }else if(!_wayland){

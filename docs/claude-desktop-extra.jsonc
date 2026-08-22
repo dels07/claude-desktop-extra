@@ -16,7 +16,7 @@
 // flags with a switch per flag. It writes claude-desktop-extra.json; entries you
 // put here win per flag id, and that panel shows those as locked.
 // Every GrowthBook flag observed being read from the feature store in Claude
-// Desktop v1.32885.1 is listed below, commented out. Uncomment a line to force
+// Desktop v1.34493.1 is listed below, commented out. Uncomment a line to force
 // it; separate multiple active entries with commas (a trailing comma after the
 // last one is fine). true/false for switches; flags marked (value flag)
 // carry numbers/strings/objects - a bare true may be meaningless for those.
@@ -28,7 +28,7 @@
 // (Code / Cowork / Computer Use enablement) are NOT listed - they bypass this
 // file entirely. Active overrides are logged to logs/claude-patches.log.
 // Flag IDs are Anthropic-internal and can vanish or change meaning in any
-// release (this list reflects v1.32885.1). If the app misbehaves, empty this
+// release (this list reflects v1.34493.1). If the app misbehaves, empty this
 // file first.
 {
   // "activeTheme": "mario",
@@ -50,6 +50,8 @@
 
   "growthbookOverrides": {
     // "17519066": true, // external-browser URL block
+    // "36693946": true, // Computer Use gate-reconcile listener - a flip re-announces the CU bridge alongside 1291166712/2486083521/40173473 (new in v1.34493.1)
+    // "40173473": true, // Computer Use win32 sub-gate - the chicago settings/stub path additionally requires this flag on Windows (new in v1.34493.1)
     // "66187241": true, // CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES for local-agent sessions
     // "123929380": true, // coworkKappa - Cowork shared account-memory dir + consolidate-memory skill availability
     // "124685897": true, // prompt template substitution
@@ -57,7 +59,6 @@
     // "162211072": true, // Prompt suggestions enable
     // "180602792": true, // midnightOwl (macOS) - live listener
     // "227459766": true, // documents list config (value flag)
-    // "235864698": true, // boot-window disable latch -> mainViewBootWindowDisabled pref, applies from the next launch (new in v1.32352.1)
     // "245679952": true, // suggestSkillsEnabled - model may proactively suggest relevant skills in sessions
     // "254738541": true, // proactive dispatch-orchestrator prompt (value flag)
     // "262787483": true, // OTLP content-capture merge input (3p; value flag) (new in v1.26832.0)
@@ -74,6 +75,7 @@
     // "554317356": true, // timeout ms (value flag)
     // "583857784": true, // transport bridge: route session through the SDK adapter when ON
     // "629684104": true, // Assistant-error-recovery - gates synthesizing a recovery result (assistantUuid/resultUuid)
+    // "657187776": true, // transcript-lease disable - turns off the CCD disk-transcript lease/claim loop (new in v1.34493.1)
     // "714014285": true, // CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING
     // "720735283": true, // Marketplace migration
     // "721728391": true, // inference routing via org policy backend (new in v1.28929.0)
@@ -84,10 +86,12 @@
     // "763725229": true, // Developer menu label/visibility
     // "770567414": true, // VM service routing (direct vs persistent pipe)
     // "790863764": true, // device_bash - combined gate with yukonSilver VM support
+    // "816856638": true, // SSH daemon upgrade-deferral disable (isDaemonUpgradeDeferralDisabled) (new in v1.34493.1)
     // "850702611": true, // turn restage-vs-discard on interrupt (ON = restage) (new in v1.26832.0)
     // "873030668": true, // sorted-list source config (value flag)
     // "879583975": true, // notification style gate: banner/badge/off map
     // "884132720": true, // OAuth scope passthrough - forwards the OAuth token scope into the CLI session env build: o
+    // "885442848": true, // hosted Chrome bridge first_party mode - picks the 1p bridge when hybrid detection is off; also a live listener (new in v1.34493.1)
     // "919579692": true, // PreviewOriginPolicy disable - ON skips the credentialed-nav origin-policy check for launch preview (new in v1.32352.1)
     // "922442190": true, // session transport attestation gate (paired with 371539023/2023768496)
     // "939257113": true, // Dispatch child session detection - isRemoteDispatchChild qualifier
@@ -128,11 +132,13 @@
     // "1696890383": true, // CLAUDE_COWORK_MEMORY_GUIDE env - passes memory guide to cowork sessions (also in force-ON 
     // "1703762832": true, // onModelRefusalFallback retry - when ON, a refusal response with direction:'retry' in Agent
     // "1707927936": true, // size limit tuning, bytes (value flag)
+    // "1710585411": true, // office-bridge trigger context suppression - ON drops triggerId/orgUuid/accountUuid from the bridge request (new in v1.34493.1)
     // "1743527783": true, // session quit-interrupt resume gateEnabled (interruptedByQuitAt handling) (new in v1.32352.1)
     // "1748356779": true, // prompt template config: system_prompt/user_prompt (value flag)
     // "1754160972": true, // worktree checkout-mode config (value flag) (new in v1.32352.1)
     // "1824824999": true, // consolidate-memory skill v2 - server-configured description/prompt text
     // "1893165035": true, // enabled+categories config object (value flag)
+    // "1904135164": true, // plugin download moveExistingAside, default ON (new in v1.34493.1)
     // "1924247864": true, // device-registry gate (Ylt)
     // "1928275548": true, // framebufferPreview feature - dev-gated (inside MW())
     // "1936081873": true, // system-prompt build-skip
@@ -145,6 +151,7 @@
     // "2016258596": true, // device-tool artifact storage/read gate (artifact_read_gate_off telemetry when OFF)
     // "2023768496": true, // coworkTrustedDeviceToken read/write gate
     // "2039376689": true, // CliGovernor pressureEvictionEnabled (memory-pressure session eviction) (new in v1.26832.0)
+    // "2048589233": true, // thinkingSummaryOnDemand in the CCD gated-SDK snapshot, default ON; also in the snapshot-staleness observe list (new in v1.34493.1)
     // "2049450122": true, // Session handoff - gates cross-device session activity broadcasting (com.anthropic.claude.s
     // "2051751800": true, // Chrome permission-mode skip_all_permission_checks resolver gate
     // "2051942385": true, // CIC can-use-tool
@@ -181,7 +188,9 @@
     // "2795002549": true, // Projects OAuth scopes
     // "2795595714": true, // device-companion secondary gate (default ON; currently inert - co-gate hardcoded off)
     // "2800354941": true, // deterministic sorting of plugin/tool/log lists
+    // "2806360886": true, // folder-access request kill-switch - ON disables the remembered/dialog folder-grant path (new in v1.34493.1)
     // "2860753854": true, // consent text override string (value flag)
+    // "2864556627": true, // Artifact host-tools capability - advertises the host-tools hostcap and authorizes host-tool calls from the artifact pane (new in v1.34493.1)
     // "2893011886": true, // enabled toggle read via value store
     // "2940196192": true, // coworkArtifacts - Cowork artifacts (list/thumbnails IPC, artifact inference, VM mount)
     // "2961849615": true, // revive CCD sessions after relogin
@@ -189,7 +198,9 @@
     // "3018088575": true, // local MCP server manager gate, default ON (new in v1.32352.1)
     // "3045399524": true, // session config: enabled/alwaysLoad (value flag)
     // "3046457088": true, // cowork taskRunFinished permission-resolve routing (new in v1.26832.0)
+    // "3093186863": true, // SSH reattach kill-switch - ON forces reattach off regardless of CLAUDE_DESKTOP_SSH_REATTACH (new in v1.34493.1)
     // "3123045134": true, // resolveCloudBranch - cloud branch resolution (OFF throws Feature disabled) (new in v1.26832.0)
+    // "3183093548": true, // plugin scan-hidden upload stubs gate, default ON (value flag) (new in v1.34493.1)
     // "3229517805": true, // scheduled-task config: sampleConcurrencyLimit/dataCacheTtlMs (value flag)
     // "3246569822": true, // canSaveSkill - save-as-skill capability in sessions
     // "3300773012": true, // scheduled-task skill description override (value flag)
@@ -231,6 +242,7 @@
     // "4034153053": true, // isEpitaxyPreviewEnabled (gated on native support probe)
     // "4066504968": true, // guided Cowork setup skill description (value flag)
     // "4074604942": true, // 1p direct MCP pool gate (pool stays null when OFF)
+    // "4114957886": true, // SSH reattach default when CLAUDE_DESKTOP_SSH_REATTACH is unset (new in v1.34493.1)
     // "4116586025": true, // louderPenguin / Code tab master gate
     // "4141490266": true, // Framebuffer system prompt injection - adds instructions when Framebuffer server active
     // "4153934152": true, // CLAUDE_CODE_SKIP_PRECOMPACT_LOAD

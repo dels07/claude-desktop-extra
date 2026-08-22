@@ -4,9 +4,40 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 ## 2026-08-22
 
+### Claude Desktop v1.34493.1
+
+All 43 patches apply. Only one needed re-fitting - `add_growthbook_overrides` (below) - and the full audit came back clean: no new darwin/win32 gate lacks Linux support, no new native module, Electron stays 42.9.2, and the four bundled native artifacts are byte-identical. Upstream still ships no native Linux Computer Use executor, so our CU patch stays load-bearing.
+
+Notable upstream additions, none of which intersect our patch sites: SSH remote sessions with reattach, Design PDF export (a new `designWindow.js` preload), an Artifact "host tools" MessagePort bridge, Claude in Chrome local pairing / Remote Control, scratch workspaces and worktrees, workspace cwd-trust prompts, and scheduled-task folder grants. Local PR creation was removed from the desktop app in favour of a cloud-session path. The dangerous-switch startup blocklist grew from 2 entries to 16 (`--disable-web-security`, `--ignore-certificate-errors`, …) - none of our launcher flags collide, but a user passing one of those now gets a hard exit with a message on stderr.
+
+Two features worth knowing about that stay macOS-only by construction: **watch-record** (the "show Claude how to do it" demonstration recorder) grew from a stub into a full Electron-side controller, but its `InputRecorder` provider is pruned to `Promise.resolve(null)` in the Linux bundle, so widening its platform gate would achieve nothing - a real port means writing a global input recorder from scratch. `violinBow` is hardcoded unavailable on every platform. The new `coworkThinkingInSend` capability is unconditionally supported and works on Linux as-is.
+
+Baselines re-validated: feature flags (+14/-2 flag IDs, registry 57 -> 59, all three override layers intact), built-in MCP (the `ccd_directory` server gained a `change_directory` tool), ion-dist (partial rebuild, both `fix_ion_dist_linux` targets still found by content signature), platform gates (darwin 88, win32 147, linux 20). The managed-settings deploy catalog gained `claudeInChromeEnabled` (109 keys).
+
+Correction to the v1.32885.1 notes: `bootPlaceholder` was **not** removed - it is still a registry entry and a zod key, carrying `{status:"unsupported"}` in both builds.
+
+### Computer Use no longer freezes the app when the GNOME portal bridge stops answering (#232)
+
+Reported on Ubuntu 26.04 / GNOME Wayland: Computer Use locked the whole app until the OS offered "Force Quit or Wait". The bridge itself was not answering, but what turned that into a freeze was ours - every bridge call on the capture and input paths was a blocking `execFileSync`, and a failed `session-start` left no memo, so each action re-paid the full bill: `screens` (15 s) + `session-start` (30 s) + the command itself (30 s), and the next click did it all again.
+
+- **The screenshot path is async end to end.** It was already an `async` function awaiting an `async` caller, so nothing was gained by blocking - it now uses `execFile` throughout and cannot stall the main process at all.
+- **A failed portal session is latched for 60 seconds.** Input and capture fail immediately with a message naming the portal and pointing at the bridge command to run by hand, instead of blocking on a session that just failed. A fresh Computer Use lock clears the latch, so a real retry - consent dialog and all - still happens on the next user gesture.
+- **The synchronous session-start backstop is capped at 8 s** (was 30). It only fires when a portal command beats the lock hook; waiting out a consent dialog belongs to the async lock path, which keeps the full 30 s budget. One failed click now costs at most 8 s of blocking, once, instead of two minutes, repeatedly.
+- **No x11-bridge fallback on a covered Wayland session.** Under a rootless XWayland server the X root window holds nothing, so `zoom` there can only answer `BadMatch` - which is exactly the confusing error the report ended on. The covered cascade now goes straight to the `desktopCapturer` last resort, matching what the diagnostics line has always advertised. Exotic (uncovered) Wayland compositors keep their x11-bridge tier.
+- An empty bridge monitor list is now called out in the log, because it means the capture region is sent in global coordinates with no `--display` - wrong on any multi-monitor layout.
+- `claude-desktop --diagnose` gains a GNOME Wayland section: GNOME Shell and PipeWire versions plus a timed, portal-free `gnome-portal-bridge screens` self-test. There was only a KDE self-test before, so a GNOME report could not show whether the bridge worked.
+
+New harness `scripts/tests/linux/test-cu-nonblocking.mjs` (18 assertions) pins all of it against the real executor with `child_process` stubbed - the screenshot path spawning nothing synchronously, the latch costing zero spawns, the exotic-Wayland tier surviving, and the sync budget staying click-sized. `scripts/tests/linux/` is a new third test category.
+
+### Packages are ~5 MB smaller
+
+v1.34493.1 ships a V8 bytecode compile-cache inside `app.asar`. We patch two of the three files it covers, so 5.04 MB of the 5.05 MB is guaranteed rejected at load - dead weight in every artifact plus a pointless read at startup. The build now drops it before repacking. V8 validates the cache against the source and recompiles on mismatch, and upstream already handles the directory being absent, so nothing changes at runtime.
+
 ### add_growthbook_overrides re-fitted for Claude Desktop v1.34493.1
 
 Upstream reshaped the features-store setter: it now takes a second (source/status) parameter, drops the dirty flag, and routes the stored value through the deployment-mode hardcoded-features filter, which used to be a separate load path calling the setter. Sub-patch B now wraps that transform call instead of reassigning the raw parameter, so overrides still apply to the map that is actually stored - the same layering as before (user override > any rollout). Anchor unchanged: the `[growthbook] loaded %d features (%d changed)` log line.
+
+Contributed by [@dels07](https://github.com/dels07) in [#231](https://github.com/patrickjaja/claude-desktop-extra/pull/231).
 
 ## 2026-08-21
 
@@ -18,6 +49,8 @@ Both breaks were in the remote claude.ai page (epitaxy), so they arrived without
 - **The diff-scope dropdown (Working tree / Branch changes / Latest turn) mounted in the browser and Files panels.** With a non-working scope applied, an empty in-app browser tab ("New tab", no iframe mounted yet) passed every gate of the empty-diff fallback (`qualifiesAsEmptyDiffView`): non-working mode, real `.epitaxy-view-panel` wrapper, and nothing for the negative terminal/browser surface check to match. Fix: a positive identity gate - the React fiber's `memoizedProps.tileId` must be `"diff"` before the fallback fires; a resolvable non-diff id is a hard no, while a null id (unreadable fiber) falls back to the old gates so the emptied-diff rescue survives a React internals rename. The same gate runs in the re-validation sweep, so an already-leaked dropdown is removed on the next sweep. New `leak` DOM scenario pins install-refusal, the dead-end rescue, re-validation stripping, and the null-fiber fallback (117 assertions).
 
 `baseline/PANEL_TABS_ANCHORS.md` re-validated against the live page (A1 updated with the ghost exception). Patch count unchanged.
+
+Contributed by [@dels07](https://github.com/dels07) in [#231](https://github.com/patrickjaja/claude-desktop-extra/pull/231).
 
 ## 2026-08-19
 

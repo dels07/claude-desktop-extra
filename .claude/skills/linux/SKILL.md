@@ -73,6 +73,7 @@ The dispatch logic lives in checked-in JS under `js/`, embedded into `patches/li
 
 ## Known Linux gotchas (one line each → which patch)
 - Opening a Code session enumerates apps via the executor (no CU lock); a portal-session ensure on that path popped GNOME's consent dialog + froze the main process (#184) → `js/cu_linux_executor.js` `_gnomePortalCmds` allowlist + async `__setLockHeld` lifecycle.
+- A gnome-portal-bridge that never answers froze the whole app: every bridge call on the capture/input paths was a blocking `execFileSync`, and a failed `session-start` left no memo, so each action re-paid `screens` + `session-start` + the command itself (#232) → screenshot path is async end to end (`_wlBridgeCallAsync`, `_x11BridgeAsync`), a failed portal session latches for 60 s (`_gnomePortalDown`, cleared by a fresh CU lock), the sync backstop is capped at 8 s (consent belongs to the async lock path, which keeps 30 s), and the x11-bridge screenshot tier is gated on `!_wlb` - a rootless XWayland root answers `BadMatch`, so a covered session goes straight to `desktopCapturer`. Pinned by `scripts/tests/linux/test-cu-nonblocking.mjs`; `--diagnose` self-tests `gnome-portal-bridge screens` on GNOME Wayland.
 - EXDEV cross-device rename (/tmp tmpfs ↔ ~/.config) → `fix_cross_device_rename.nim` (copy+unlink fallback).
 - Sandbox credential-path blocklist (.ssh/.gnupg/.aws/keyrings/.pki/autostart) → `fix_sensitive_dirs_linux.nim`.
 - Tray DBus races on session change → `fix_tray_dbus.nim` (async + mutex + destroy delay). Theme: `fix_tray_icon_theme.nim`.

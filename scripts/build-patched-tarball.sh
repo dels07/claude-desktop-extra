@@ -355,6 +355,18 @@ if [ "$SYNTAX_FAILED" = true ]; then
 fi
 log_info "JavaScript syntax validation passed"
 
+# Drop upstream's V8 bytecode compile-cache (new in v1.34493.1). index.pre.js
+# feeds each .jsc to `new vm.Script(..., {cachedData})`; V8 validates it against
+# the source and silently recompiles on mismatch, so patched code runs correctly
+# either way. But we patch the two files the cache covers, so 5.04 MB of the
+# 5.05 MB is guaranteed rejected - dead weight in every artifact and a pointless
+# 5 MB read at startup. A missing directory is already handled upstream (the
+# readdirSync sits in a try/catch that yields []).
+if [ -d "$APP_DIR/app.asar.contents/compile-cache" ]; then
+    log_info "Dropping upstream compile-cache ($(du -sh "$APP_DIR/app.asar.contents/compile-cache" | cut -f1)) - invalidated by our patches"
+    rm -rf "$APP_DIR/app.asar.contents/compile-cache"
+fi
+
 # Repack app.asar into the tree.
 # --unpack keeps native .node files and any spawn-helper in app.asar.unpacked/ and
 # flags them in the asar header so Electron redirects require() to the unpacked copy.

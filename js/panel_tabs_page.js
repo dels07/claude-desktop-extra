@@ -646,13 +646,23 @@
     // One of OUR side columns can never be the chat column, whatever its panes are
     // doing this frame.
     if (el.hasAttribute && el.hasAttribute(COL_ATTR)) return false;
-    var shells = el.querySelectorAll(SHELL_SELECTOR), i, abs = false;
+    var shells = el.querySelectorAll(SHELL_SELECTOR), i, j, abs = false;
     // It must own a shell...
     if (!shells.length) return false;
-    // ...every one of them must be empty, by either of upstream's two pane anchors...
+    // ...every one of them must be empty, by either of upstream's two pane anchors.
+    // "Empty" ignores aria-hidden view panels (2026-08-21, measured on 1.32352.1):
+    // a remote redeploy put an aria-hidden="true" .epitaxy-view-panel GHOST (no
+    // [data-pane-root], no fiber tileId, no chrome) inside the chat shell, which
+    // made this test fail every frame - no-chat-column warned and the bar never
+    // armed. A hidden-from-AT ghost is not occupancy; a REAL pane never carries
+    // aria-hidden="true" (live check: the diff/preview panels do not).
     for (i = 0; i < shells.length; i++) {
       if (shells[i].querySelector(PANE_SELECTOR)) return false;
-      if (shells[i].querySelector(PANE_FALLBACK_SELECTOR)) return false;
+      var vps = shells[i].querySelectorAll(PANE_FALLBACK_SELECTOR);
+      for (j = 0; j < vps.length; j++) {
+        if (vps[j].getAttribute && vps[j].getAttribute("aria-hidden") === "true") continue;
+        return false;
+      }
     }
     if (!window.getComputedStyle) return true;
     // ...and at least one must be out of flow, which no side wrapper's is.

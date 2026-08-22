@@ -2,6 +2,23 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-22
+
+### add_growthbook_overrides re-fitted for Claude Desktop v1.34493.1
+
+Upstream reshaped the features-store setter: it now takes a second (source/status) parameter, drops the dirty flag, and routes the stored value through the deployment-mode hardcoded-features filter, which used to be a separate load path calling the setter. Sub-patch B now wraps that transform call instead of reassigning the raw parameter, so overrides still apply to the map that is actually stored - the same layering as before (user override > any rollout). Anchor unchanged: the `[growthbook] loaded %d features (%d changed)` log line.
+
+## 2026-08-21
+
+### Two community-feature fixes: panel tabs revived after a remote claude.ai redeploy, diff-scope dropdown no longer leaks into other panels
+
+Both breaks were in the remote claude.ai page (epitaxy), so they arrived without any desktop release. Diagnosed live over CDP against a running 1.32352.1 install.
+
+- **Panel tabs stopped rendering entirely.** A remote redeploy put an `aria-hidden="true"` `.epitaxy-view-panel` ghost node (no `[data-pane-root]`, no fiber `tileId`, no chrome) inside the chat column's `.tiles-shell`. The chat-column discriminator required every shell to be empty, so it failed each frame, warned `no-chat-column`, and the tab bar never armed. Fix: an aria-hidden view panel no longer counts as shell occupancy (`chatLooksRight` in `panel_tabs_page.js`, and the harvester's `.epitaxy-view-panel` fallback in `panel_tabs_harvest.js` skips ghosts too). A non-hidden view panel still disqualifies, so the decoy defense is unchanged. The DOM suite's chat fixture now ships the ghost, plus a new `ghost-decoy` scenario (380 assertions).
+- **The diff-scope dropdown (Working tree / Branch changes / Latest turn) mounted in the browser and Files panels.** With a non-working scope applied, an empty in-app browser tab ("New tab", no iframe mounted yet) passed every gate of the empty-diff fallback (`qualifiesAsEmptyDiffView`): non-working mode, real `.epitaxy-view-panel` wrapper, and nothing for the negative terminal/browser surface check to match. Fix: a positive identity gate - the React fiber's `memoizedProps.tileId` must be `"diff"` before the fallback fires; a resolvable non-diff id is a hard no, while a null id (unreadable fiber) falls back to the old gates so the emptied-diff rescue survives a React internals rename. The same gate runs in the re-validation sweep, so an already-leaked dropdown is removed on the next sweep. New `leak` DOM scenario pins install-refusal, the dead-end rescue, re-validation stripping, and the null-fiber fallback (117 assertions).
+
+`baseline/PANEL_TABS_ANCHORS.md` re-validated against the live page (A1 updated with the ghost exception). Patch count unchanged.
+
 ## 2026-08-19
 
 ### Claude Desktop v1.32885.1 - zero patch changes; release healed after a CI infrastructure timeout

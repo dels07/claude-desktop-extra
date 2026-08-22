@@ -117,6 +117,33 @@
   // not. This exists so the fallback cannot reach a non-diff tile.
   var NON_DIFF_SURFACE_SELECTOR = 'canvas,iframe,webview,[class*="xterm"],[class*="terminal"]';
   var MAX_VIEW_WALK = 8; // only used when there is no view-panel ancestor
+
+  // ---- FIBER IDENTITY: which tile does a panel actually belong to? ----------
+  // React leaves its fiber on every rendered node under a __reactFiber$<hash>
+  // key, and an ANCESTOR fiber's memoizedProps carries the tile's identity as a
+  // plain string prop `tileId` ("diff", "preview", "terminal", "chat", ...).
+  // Measured live 2026-08-21 on 1.32352.1: from the .epitaxy-view-panel node the
+  // prop resolves within 3-5 hops; panel tabs' harvester has used the same walk
+  // (bounded, SEARCHED - never a hardcoded hop count) since 2026-08-04.
+  // Returns null when the fiber key or the prop cannot be found - callers must
+  // treat null as "unknown", never as "not a diff".
+  var DIFF_TILE_ID = "diff";
+  var MAX_FIBER_HOPS = 120;
+
+  function fiberTileIdOf(el) {
+    try {
+      var key = null;
+      for (var k in el) { if (k.indexOf("__reactFiber$") === 0) { key = k; break; } }
+      if (!key) return null;
+      var f = el[key], hops = 0;
+      while (f && hops++ < MAX_FIBER_HOPS) {
+        var p = f.memoizedProps;
+        if (p && typeof p.tileId === "string") return p.tileId;
+        f = f.return;
+      }
+    } catch (e) { /* a foreign fiber shape must never break qualification */ }
+    return null;
+  }
   var SWEEP_MS = 500;
   var NO_PANEL_SWEEP_THRESHOLD = 10;
   var PENDING_CUE_MS = 600;
@@ -202,8 +229,9 @@
   // That state is DOM-INDISTINGUISHABLE from a Terminal tile on the evidence we
   // have (no Terminal-tile DOM was ever captured, and no positive Terminal
   // marker is known to exist), so the fallback is gated on something outside the
-  // DOM instead - our own applied mode - plus a negative surface check. The
-  // three gates are documented individually below; between them, the fallback
+  // DOM instead - our own applied mode - plus, since 2026-08-21, the React
+  // fiber's own tile identity (GATE 3), plus a negative surface check. The
+  // four gates are documented individually below; between them, the fallback
   // cannot fire in the default Working tree scope at all, which is the only
   // scope a user who never touched our dropdown is ever in.
   function looksLikeNonDiffSurface(node) {
@@ -224,7 +252,21 @@
     // this path and "qualify" some shared ancestor.
     if (!node || !node.matches) return false;
     try { if (!node.matches(VIEW_CONTAINER_SELECTOR)) return false; } catch (e) { return false; }
-    // GATE 3 - and it must not be a terminal / embedded-browser surface.
+    // GATE 3 - POSITIVE IDENTITY (2026-08-21, the dropdown-leak fix). The
+    // paragraph above says the empty state is DOM-indistinguishable from other
+    // tiles - it no longer has to be: the React fiber's memoizedProps.tileId
+    // names the owning tile outright. Measured live on 1.32352.1: an EMPTY
+    // in-app browser tab ("New tab", no iframe mounted yet) sailed through
+    // gates 1 and 2 and the negative surface check below (nothing to match!),
+    // and our dropdown landed in its chrome row - tileId said "preview" the
+    // whole time. A resolvable tileId that is not "diff" is a hard no. A null
+    // (unreadable fiber - a React internals rename) falls through to the old
+    // gates, so the dead-end rescue cannot be lost to an upstream refactor;
+    // the leak can only return in that degraded state, and the "leak" DOM
+    // scenario pins both directions.
+    var tid = fiberTileIdOf(node);
+    if (tid !== null && tid !== DIFF_TILE_ID) return false;
+    // GATE 4 - and it must not be a terminal / embedded-browser surface.
     if (looksLikeNonDiffSurface(node)) return false;
     return true;
   }
@@ -428,7 +470,8 @@
       "] document[" + describeMarkers(document) +
       "] appliedMode=" + lastKnownMode +
       " emptyDiffFallback=" + (wrapper ? qualifiesAsEmptyDiffView(wrapper) : false) +
-      " nonDiffSurface=" + (wrapper ? looksLikeNonDiffSurface(wrapper) : "n/a"));
+      " nonDiffSurface=" + (wrapper ? looksLikeNonDiffSurface(wrapper) : "n/a") +
+      " tileId=" + (wrapper ? fiberTileIdOf(wrapper) : "n/a"));
   }
 
   var setModeFailLogged = false;

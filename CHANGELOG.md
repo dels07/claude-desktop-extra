@@ -29,6 +29,27 @@ while a manual launch was native Wayland), no `GlobalShortcutsPortal` feature fl
 The launcher now exports `CLAUDE_LAUNCHER` and `fix_startup_settings` builds the entry from it,
 re-adding `--profile=<name>` when a profile is active.
 
+### Launching the app shortly after login no longer opens it hidden (#233)
+
+Session-restore detection used to key off one signal: if the graphical session had started less
+than 60 seconds ago, the launch was treated as a restore and the main window was created hidden.
+That caught the case it was written for - gnome-session relaunches saved clients without
+`--startup`, so "start in system tray" was ignored on every login - but it also caught anyone who
+simply clicked the launcher icon shortly after logging in. They got a tray icon, no window, and
+`born_hidden_reason: 'os_login'` in the log, and had to click a second time to get in.
+
+The heuristic now requires two conditions instead of one: the session must be young **and** an
+enabled XDG autostart entry must exist, meaning the user actually asked for a hidden start. Someone
+with autostart switched off is never suppressed. Every error path - missing entry, unreadable
+socket, no `/run/user` - falls back to showing the window, since a wrongly hidden window is
+invisible and hard to report while a wrongly shown one is a minor annoyance.
+
+The predicate moved out of the patch into `js/startup_session_restore_gate.js`, where it is
+syntax-checked and unit-tested (`scripts/tests/linux/test-startup-gate.mjs`, 10 checks covering
+both users, X11 and Wayland, absolute `WAYLAND_DISPLAY` paths, `XDG_CONFIG_HOME`, and the
+fail-safe direction). It also records its decision as a `[startup-gate]` line in
+`claude-patches.log`.
+
 ### New: activation diagnostics
 
 Launching Claude while it is already running hands the request to the running process, which is meant

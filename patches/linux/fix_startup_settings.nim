@@ -37,11 +37,24 @@
 #     the native XDG autostart read/write end-state is present (FAIL loud if a
 #     future bump removes it — that would silently break the Settings toggle and
 #     re-introduce the always-visible-window bug).
-#   - P3 (session-restore detection): KEEP as an ACTIVE patch — augment the single
-#     argv.includes("--startup") gate with a compositor-socket mtime heuristic.
+#   - P3 (session-restore detection): ACTIVE patch — widen the single
+#     argv.includes("--startup") gate with js/startup_session_restore_gate.js,
+#     which suppresses ONLY when an enabled XDG autostart entry exists AND the
+#     graphical session started under 60s ago. Requiring the autostart entry is
+#     what keeps an ordinary launch visible (issue #233).
+#   - P4 (autostart Exec): ACTIVE patch — build the entry from CLAUDE_LAUNCHER so
+#     a login launch goes through our launcher rather than the bundled Electron.
 
 import std/[os, strutils]
 import regex
+
+# The session-restore predicate lives in js/ so it is reviewable, syntax-checked
+# and unit-tested (scripts/tests/linux/test-startup-gate.mjs). It is a bare JS
+# expression, inlined verbatim into upstream's show-at-launch gate. Comments in
+# it are /* */ only - a // comment would swallow the minified code that follows
+# it on the same line.
+const GATE_JS = staticRead("../../js/startup_session_restore_gate.js")
+const GATE_MARKER = "__cdb_startup_gate_v2__"
 
 proc apply*(input: string): string =
   var patchesApplied = 0
@@ -94,17 +107,24 @@ proc apply*(input: string): string =
     echo "         If the --startup flag or X-GNOME-Autostart-enabled disappeared, the"
     echo "         autostart window-hide / toggle would break; re-audit fix_startup_settings P2."
 
-  # ── P3 (active patch): GNOME session-restore detection ────────────────────
-  # Native gate is only `wco=!<proc>.argv.includes("--startup")`. gnome-session-service
-  # re-launches saved apps WITHOUT --startup and there is no env var to distinguish it.
-  # Heuristic: the Wayland compositor socket (WAYLAND_DISPLAY, e.g.
-  # /run/user/UID/wayland-1) is created when the graphical session starts; X11 falls
-  # back to the session bus socket. If Claude starts within 60s of that mtime, assume
-  # session-restore and treat it as a --startup launch (hide the window).
-  # Idempotency: positively assert OUR injected marker (`_b.mtimeMs`) is present.
-  if "_b.mtimeMs" in input:
-    echo "  [INFO] GNOME session-restore detection: already patched (_b.mtimeMs present)"
+  # ── P3 (active patch): session-restore detection ─────────────────────────
+  # Upstream's only gate is `<proc>.argv.includes("--startup")`, and
+  # gnome-session / Plasma re-launch saved clients after a reboot WITHOUT that
+  # flag, so a user who asked for a hidden start got the window on every login.
+  # We widen the gate with the predicate in js/startup_session_restore_gate.js,
+  # which suppresses only when an ENABLED XDG autostart entry exists AND the
+  # graphical session started under 60s ago. Requiring the autostart entry is
+  # what keeps an ordinary launch visible: without it, clicking the launcher
+  # icon shortly after login produced a hidden window (issue #233).
+  # Idempotency: positively assert OUR injected marker is present.
+  if GATE_MARKER in input:
+    echo "  [INFO] session-restore detection: already patched (" & GATE_MARKER & ")"
     patchesApplied += 1
+  elif "_b.mtimeMs" in input:
+    # The superseded v1 predicate suppressed on the socket mtime alone. Never
+    # treat it as "already patched" - that would silently ship the #233 bug.
+    echo "  [FAIL] input carries the superseded v1 session-restore predicate"
+    echo "         (_b.mtimeMs). Re-extract a clean bundle."
   else:
     # v1.26832.0: `--startup` is a template literal and process is reached via a
     # namespace alias (L.default.argv), so accept either quoting and member chains.
@@ -119,18 +139,19 @@ proc apply*(input: string): string =
         # (`showWindow ??= !<proc>.argv.includes("--startup")`) and `!` binds
         # tighter than `||`. Without the parens the injected heuristic would
         # read `(!includes)||restore` and *show* the window on session restore
-        # — the exact opposite of what this patch is for.
+        # - the exact opposite of what this patch is for.
         "(" & processVar &
-          ".argv.includes(\"--startup\")||process.platform===\"linux\"&&(()=>{try{const _uid=String(process.getuid());const _wd=process.env.WAYLAND_DISPLAY;const _sock=_wd?require(\"path\").join(\"/run/user\",_uid,_wd):require(\"path\").join(\"/run/user\",_uid,\"bus\");const _b=require(\"fs\").statSync(_sock);return(Date.now()-_b.mtimeMs)<60000}catch(e){return false}})())",
+          ".argv.includes(\"--startup\")||process.platform===\"linux\"&&" &
+          GATE_JS.strip() & ")",
     )
     if count3 == 1:
-      echo "  [OK] GNOME session-restore detection: augmented argv --startup gate (1 match)"
+      echo "  [OK] session-restore detection: augmented argv --startup gate (1 match)"
       patchesApplied += 1
     elif count3 == 0:
-      echo "  [FAIL] GNOME session-restore: argv.includes(\"--startup\") gate not found"
+      echo "  [FAIL] session-restore: argv.includes(\"--startup\") gate not found"
     else:
-      echo "  [FAIL] GNOME session-restore: expected 1 argv --startup site, found " &
-        $count3 & " — re-audit (the window-show gate may have changed shape)"
+      echo "  [FAIL] session-restore: expected 1 argv --startup site, found " & $count3 &
+        " - re-audit (the window-show gate may have changed shape)"
   if result.len == 0:
     result = input
 

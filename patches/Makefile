@@ -53,6 +53,8 @@ linux/fix_epitaxy_autoscroll: ../js/fix_epitaxy_autoscroll.js
 
 linux/fix_second_instance_diag: ../js/second_instance_diag.js
 
+linux/fix_startup_settings: ../js/startup_session_restore_gate.js
+
 # Diff view modes: the main-process half embeds the injected page script AND the
 # expand/collapse-all module, both via staticRead, so a change to any of them has
 # to rebuild the binary. (This line was missing until 2026-08-01 - JS-only edits

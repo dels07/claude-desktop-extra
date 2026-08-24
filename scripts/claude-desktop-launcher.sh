@@ -1775,6 +1775,28 @@ if [[ -n "${CLAUDE_MENU_BAR:-}" ]]; then
     export CLAUDE_MENU_BAR
 fi
 
+# Tell the app which launcher started it, so the XDG autostart entry written by
+# the "Start at login" toggle points back HERE instead of at the bundled Electron
+# binary. Upstream builds that entry from process.execPath
+# (/usr/lib/claude-desktop/claude), which would start the login instance with
+# none of the setup below: no --ozone-platform=wayland (XWayland instead of
+# native Wayland), no GlobalShortcutsPortal feature flag, no PATH repair (Cowork
+# cannot find qemu), no --password-store, no systemd scope (the portal identity
+# that persists Computer Use grants), and for a named profile no --user-data-dir.
+# patches/linux/fix_startup_settings.nim (P4) reads this, and re-adds
+# --profile=<name> from CLAUDE_PROFILE.
+if [[ -n "${CLAUDE_APPIMAGE_PATH:-}" ]]; then
+    # AppImage: the mount point is ephemeral, the .AppImage file is not.
+    export CLAUDE_LAUNCHER="$CLAUDE_APPIMAGE_PATH"
+else
+    _cdb_launcher_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+    if [[ -x "$_cdb_launcher_self" ]]; then
+        export CLAUDE_LAUNCHER="$_cdb_launcher_self"
+    else
+        log "cannot resolve own path ($0); autostart entry will fall back to the Electron binary"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # SingletonLock cleanup
 # ---------------------------------------------------------------------------

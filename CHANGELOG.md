@@ -2,6 +2,45 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-24
+
+### Bringing the window back to the front now works again (#233)
+
+`fix_dock_bounce` exists to stop the taskbar demanding attention on KDE and GNOME - what upstream's
+macOS dock bounce turns into on Linux. It did that by overriding six Electron methods whenever no
+Claude window was focused, two of which mattered a lot more than intended:
+`BrowserWindow.show()` silently became `showInactive()`, and `BrowserWindow.focus()` became a no-op.
+If the window was already visible, `show()` became a no-op with no fallback at all.
+
+Every path that reveals a hidden window runs precisely when nothing of Claude is focused - the tray's
+"Show App", launching the app while it is already running, and our own Computer Use teach-mode
+restore - so all of them were being swallowed. The patch is now scoped to the attention APIs it was
+written for (`flashFrame` and `requestUserAttention`); `show`, `focus`, `moveTop`, `app.focus` and
+`webContents.focus` are back to stock Electron behaviour.
+
+### The autostart entry now points at the launcher
+
+Upstream builds the "Start at login" entry as `Exec=<bundled electron> --startup`, bypassing our
+launcher entirely. A login launch therefore started with none of its setup: no
+`--ozone-platform=wayland` (so on a Wayland session the autostarted instance came up under XWayland
+while a manual launch was native Wayland), no `GlobalShortcutsPortal` feature flag, no PATH repair
+(Cowork could not find qemu), no `--password-store`, no systemd scope, and for a named profile no
+`--user-data-dir` - meaning an autostarted named profile silently used the default profile's data.
+The launcher now exports `CLAUDE_LAUNCHER` and `fix_startup_settings` builds the entry from it,
+re-adding `--profile=<name>` when a profile is active.
+
+### New: activation diagnostics
+
+Launching Claude while it is already running hands the request to the running process, which is meant
+to reveal and focus its window. Upstream logs nothing whatsoever on that path, so when the window
+does not come back there is no evidence to work from. `fix_second_instance_diag` records the received
+argv and cwd, whether Chromium forwarded an `--xdg-activation-token` (the Wayland raise depends on
+one, and the bundle never reads one itself), and each window's visible/focused/minimized state,
+geometry and display - before the reveal, right after it, and again at +500 ms and +2 s. It also
+names the case where the request arrived before any window existed. Output goes to
+`~/.config/Claude/logs/claude-patches.log`. Behaviour-neutral, and it hooks only a public Electron
+event, so there are no minified anchors to re-fit on an upstream bump.
+
 ## 2026-08-22
 
 ### Claude Desktop v1.34493.1

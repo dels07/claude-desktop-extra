@@ -348,7 +348,7 @@ The official Linux build ships one cross-platform JS bundle that gates plenty of
 
 - **[`patches/community/`](PATCHES.md#community-features)** (6 patches) - optional features you switch on yourself in Settings → **Extra** → **Community Features**. Off unless you ask for them (the theme picker is the exception, on by default).
 - **[`patches/core/`](PATCHES.md#core-infrastructure)** (7 patches) - always-on infrastructure the rest builds on: the Extra settings pages themselves, the theme engine, the flag-override mechanism, and the multi-profile plumbing.
-- **[`patches/linux/`](PATCHES.md#linux-compatibility)** (30 patches) - upstream features still gated to macOS/Windows in the shared bundle, or that break in a Linux environment. Always on, nothing to configure.
+- **[`patches/linux/`](PATCHES.md#linux-compatibility)** (31 patches) - upstream features still gated to macOS/Windows in the shared bundle, or that break in a Linux environment. Always on, nothing to configure.
 
 We keep the set as small as possible: every patch is re-audited against a fresh bundle on each upstream release, a pattern that no longer matches fails the build rather than silently doing nothing, and a patch is removed outright once Anthropic ships that behavior natively.
 

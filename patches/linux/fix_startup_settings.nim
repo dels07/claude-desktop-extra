@@ -45,7 +45,7 @@ import regex
 
 proc apply*(input: string): string =
   var patchesApplied = 0
-  const expectedPatches = 3
+  const expectedPatches = 4
 
   # ── P1 (guard): native XDG autostart READ ────────────────────────────────
   # isStartupOnLoginEnabled now delegates to a read helper, and the autostart dir
@@ -80,7 +80,7 @@ proc apply*(input: string): string =
   # error log is the second positive anchor.
   var m2: RegexMatch2
   let desktopBuilder = input.find(
-    re2"""\[Desktop Entry\]["`],["`]Type=Application["`],["`]Name=\$\{[\w$]+\.app\.getName\(\)\}["`],["`]Exec=\$\{[\w$]+\(process\.execPath\)\} --startup["`],["`]X-GNOME-Autostart-enabled=true["`]""",
+    re2"""\[Desktop Entry\]["`],["`]Type=Application["`],["`]Name=\$\{[\w$]+\.app\.getName\(\)\}["`],["`]Exec=\$\{.*?\} --startup["`],["`]X-GNOME-Autostart-enabled=true["`]""",
     m2,
   )
   let writeErrLog = "Failed to update XDG autostart entry" in input
@@ -133,6 +133,49 @@ proc apply*(input: string): string =
         $count3 & " — re-audit (the window-show gate may have changed shape)"
   if result.len == 0:
     result = input
+
+  # ── P4 (active patch): autostart entry must point at OUR launcher ─────────
+  # Upstream builds the XDG autostart entry as
+  #   `Exec=${<shellQuote>(process.execPath)} --startup`
+  # i.e. the BUNDLED ELECTRON BINARY (/usr/lib/claude-desktop/claude), not our
+  # launcher (/usr/bin/claude-desktop). A login launch would therefore start with
+  # none of the launcher's setup: no --ozone-platform=wayland (so on a Wayland
+  # session the autostarted instance comes up under XWayland while a later manual
+  # launch is native Wayland - two windowing regimes against one instance lock),
+  # no --enable-features=UseOzonePlatform,GlobalShortcutsPortal, no PATH repair
+  # (Cowork cannot find qemu), no --password-store, no systemd scope (the portal
+  # identity that persists Computer Use grants), and for a named profile no
+  # --user-data-dir - so the autostarted instance would silently share the
+  # DEFAULT profile's userData.
+  #
+  # The launcher exports CLAUDE_LAUNCHER (its own resolved path, or the AppImage
+  # path), so Exec points back at it, and --profile=<name> is re-added from
+  # CLAUDE_PROFILE. Falls back to upstream's process.execPath when the env var is
+  # absent (someone ran the Electron binary directly).
+  # Idempotency: positively assert OUR injected CLAUDE_LAUNCHER read is present.
+  if "CLAUDE_LAUNCHER" in result:
+    echo "  [INFO] autostart Exec already points at the launcher (idempotent)"
+    patchesApplied += 1
+  else:
+    let pattern4 = re2"""(Exec=\$\{)([\w$]+)(\(process\.execPath\)\} --startup)"""
+    var count4 = 0
+    result = result.replace(
+      pattern4,
+      proc(m: RegexMatch2, s: string): string =
+        inc count4
+        let shellQuote = s[m.group(1)]
+        s[m.group(0)] & shellQuote & "(process.env.CLAUDE_LAUNCHER||process.execPath)}" &
+          "${process.env.CLAUDE_PROFILE?\" --profile=\"+" &
+          "process.env.CLAUDE_PROFILE.replace(/[^A-Za-z0-9._-]/g,\"\"):\"\"}" &
+          " --startup",
+    )
+    if count4 == 1:
+      echo "  [OK] autostart Exec now points at the launcher (1 match)"
+      patchesApplied += 1
+    elif count4 == 0:
+      echo "  [FAIL] autostart .desktop Exec builder not found (re-audit P4)"
+    else:
+      echo "  [FAIL] expected 1 autostart Exec site, found " & $count4
 
   if patchesApplied < expectedPatches:
     echo "  [FAIL] Only " & $patchesApplied & "/" & $expectedPatches & " patches applied"

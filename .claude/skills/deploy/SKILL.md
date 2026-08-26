@@ -43,7 +43,6 @@ Args: `$ARGUMENTS` (`force` / `no-force` override the auto-decision; empty = dec
    Report the run URL and status. Offer: "Watch with `gh -R patrickjaja/claude-desktop-extra run watch <id>`".
 
 ## Notes
-- The release job's AUR preflight probes `ssh://aur.archlinux.org` and fails the run fast (before publishing anything) when the AUR is down - wait for the AUR to come back and re-run; a half-deployed run can be healed with `gh run rerun <id> --failed`. The AUR push diffs the PKGBUILD against whatever the AUR currently holds, so a stale AUR catches up automatically on the next release.
 - Do NOT bump versions or edit files here - this only triggers the pipeline. Version/patch work belongs in `/update`.
 - If the diff shows BOTH a new `.upstream-version` and other changes, the non-force new-upstream run covers everything (the release builds from the committed tree).
 - If `gh workflow run` errors with "Workflow does not have 'workflow_dispatch'" it's a permissions/branch issue - confirm the workflow file on `master` still declares `workflow_dispatch`.

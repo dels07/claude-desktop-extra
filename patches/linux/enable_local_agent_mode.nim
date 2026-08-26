@@ -6,8 +6,11 @@
 # Multi-part patch:
 #   1  darwin/win32-gated feature functions (count varies per version: quietPenguin
 #      always; chillingSlothFeat too in <=v1.10628.2, but in v1.11187.4 it moved to a
-#      non-platform gate `oW`, leaving only quietPenguin here. Patch 3's merger
-#      force-overrides all of them regardless, so this is belt-and-suspenders.)
+#      non-platform gate `oW`, leaving only quietPenguin here. NOTE (re-verified
+#      v1.37937.0): the registry consumes this as `quietPenguin:cB(h3t)` where
+#      `cB(e){return app.isPackaged?{status:"unavailable"}:e()}`, so h3t is never
+#      CALLED in a packaged build - this sub-patch only affects dev builds, and
+#      quietPenguin is delivered in shipped packages solely by Patch 3.)
 #   1b yukonSilver (NH) Linux early return
 #   2  chillingSlothLocal (no-op -- inherently supported on Linux)
 #   3  mC() async merger overrides
@@ -164,9 +167,20 @@ proc apply*(input: string): string =
   # message. Let the native determiner report true support. (This is the same
   # capability-masking failure mode as the deleted claude-native.js stub.)
   #
-  # We DO override the features we genuinely provide the backend for on Linux:
-  # Claude Code / dispatch (chillingSloth*), Computer Use (we ship the input +
-  # screenshot backends), plugins (ccdPlugins), and the penguin prefs.
+  # We override the features we genuinely provide the backend for on Linux.
+  # Re-verified against v1.37937.0, three of the six are LOAD-BEARING and three
+  # are currently inert safety nets - keep the distinction honest:
+  #   quietPenguin   NEEDED  registry gives cB(h3t) -> unavailable when packaged
+  #   louderPenguin  NEEDED  _3t() is darwin/win32 + flag 4116586025 gated
+  #   computerUse    NEEDED  v3t()->ER() tests a Set([darwin,win32]) -> Linux
+  #                          gets {status:"unsupported"}; we ship the input +
+  #                          screenshot backends, so we override it
+  #   chillingSlothFeat  inert  W4t() already returns {status:"supported"}
+  #   chillingSlothLocal inert  q4t() already returns {status:"supported"}
+  #   ccdPlugins         inert  registry value is literally lB={status:"supported"}
+  # The three inert keys are kept deliberately: they cost nothing, and they keep
+  # working if upstream ever re-gates them. Do NOT let this comment drift back
+  # into claiming all six are required.
   # chillingSlothPool was dropped here in v1.30096.1: upstream removed the
   # feature from the registry and the Zod schema in v1.28929.0 (flag 1992087837
   # survives only as the CC worktree warm-pool gate), so the key was a no-op
@@ -174,36 +188,75 @@ proc apply*(input: string): string =
   let overrides =
     ",quietPenguin:{status:\"supported\"},louderPenguin:{status:\"supported\"},chillingSlothFeat:{status:\"supported\"},chillingSlothLocal:{status:\"supported\"},ccdPlugins:{status:\"supported\"},computerUse:{status:\"supported\"}"
 
-  # New format: return{...FUNC(),...props}}; or }},
-  let pattern3New = re"(return\{\.\.\.(?:[\w$]+)\(\),[^}]+)(\}\}[;,])"
-  let m3 = result.find(pattern3New)
-  if m3.isSome:
-    let bounds = m3.get().matchBounds
-    let endChar = $result[bounds.b] # ';' or ','
-    let endTag = "}}" & endChar
-    let insertPos = bounds.b + 1 - endTag.len
-    result = result[0 ..< insertPos] & overrides & endTag & result[bounds.b + 1 .. ^1]
-    echo "  [OK] mC() feature merger: 6 features overridden (1 match)"
+  # Idempotency: our overrides are a verbatim literal run, so their presence IS
+  # the patched end-state (positive assertion, AGENTS.md Rule 6).
+  if overrides in result:
+    echo "  [OK] mC() feature merger: overrides already present (idempotent)"
     inc patchesApplied
   else:
-    # Fallback: old format
-    let pattern3Old =
-      re"(const [\w$]+=async\(\)=>\(\{\.\.\.[\w$]+\(\),[^}]+)(await [\w$]+\(\))\}\)"
-    var count3 = 0
-    result = result.replace(
-      pattern3Old,
-      proc(m: RegexMatch): string =
-        inc count3
-        if count3 > 1:
-          return m.match
-        m.captures[0] & m.captures[1] & overrides & "})",
-    )
-    if count3 >= 1:
-      echo &"  [OK] mC() feature merger: 6 features overridden (old format, {count3} match)"
+    # New format: the async merger ends
+    #   return{...STATIC(),...LOCALS}}
+    # STATIC() is the static feature registry, LOCALS the async-resolved
+    # overrides object. We append our overrides LAST so they win over both.
+    #
+    # Until v1.34493.1 this was pinned by the tail `}}` + `;` or `,`. That
+    # terminator was never part of the merger -- it is whatever separator the
+    # minifier emitted for the NEXT statement, and it vanished in v1.37937.0
+    # (`...p}}var hB=null;` where v1.34493.1 had `...l}},fR=null;`). Match the
+    # merger structurally instead and then VERIFY the match semantically: the
+    # spread callee must be the static feature registry, i.e. its body must
+    # list `quietPenguin:`. A generic shape plus a domain assertion beats a
+    # tighter regex hung on an incidental neighbouring character.
+    let pattern3New = re"return\{\.\.\.([\w$]+)\(\),\.\.\.[\w$]+\}\}"
+    var m3Count = 0
+    var m3End = -1
+    var m3Callee = ""
+    var pos3 = 0
+    while pos3 < result.len:
+      let m = result.find(pattern3New, pos3)
+      if m.isNone:
+        break
+      let mm = m.get()
+      let callee = mm.captures[0]
+      # Positive assertion: callee is the static feature registry, not some
+      # unrelated `return{...f(),...opts}}` elsewhere in the bundle.
+      let defIdx = strutils.find(result, "function " & callee & "(")
+      if defIdx >= 0:
+        let sliceEnd = min(defIdx + 4000, result.len - 1)
+        if result[defIdx .. sliceEnd].contains("quietPenguin:"):
+          inc m3Count
+          m3End = mm.matchBounds.b
+          m3Callee = callee
+      pos3 = mm.matchBounds.b + 1
+
+    if m3Count == 1:
+      # Insert immediately before the merger's closing "}}".
+      let insertPos = m3End - 1
+      result = result[0 ..< insertPos] & overrides & result[insertPos .. ^1]
+      echo &"  [OK] mC() feature merger via {m3Callee}(): 6 features overridden (1 match)"
       inc patchesApplied
-    else:
-      echo "  [FAIL] mC() feature merger: 0 matches, expected 1"
+    elif m3Count > 1:
+      echo &"  [FAIL] mC() feature merger: {m3Count} registry-verified matches, expected exactly 1"
       failed = true
+    else:
+      # Fallback: old format
+      let pattern3Old =
+        re"(const [\w$]+=async\(\)=>\(\{\.\.\.[\w$]+\(\),[^}]+)(await [\w$]+\(\))\}\)"
+      var count3 = 0
+      result = result.replace(
+        pattern3Old,
+        proc(m: RegexMatch): string =
+          inc count3
+          if count3 > 1:
+            return m.match
+          m.captures[0] & m.captures[1] & overrides & "})",
+      )
+      if count3 >= 1:
+        echo &"  [OK] mC() feature merger: 6 features overridden (old format, {count3} match)"
+        inc patchesApplied
+      else:
+        echo "  [FAIL] mC() feature merger: 0 matches, expected 1"
+        failed = true
 
   # Patch 3n: sshRemotePassthrough flag 1496676413 - now a REGRESSION GUARD.
   #
@@ -234,7 +287,19 @@ proc apply*(input: string): string =
     echo "  [FAIL] sshRemotePassthrough: resolveSshControllerForMcp no longer unconditional - upstream may have re-gated SSH plugin/MCP forwarding; re-audit Patch 3n"
     failed = true
 
-  # Patch 4: Change preferences defaults for Code features
+  # Patch 4: Change preferences defaults for Code features.
+  #
+  # CAVEAT (verified v1.37937.0, byte-identical in v1.34493.1 - upstream
+  # behaviour, not ours): the preferences reader carries a one-shot kill-switch
+  # for this key:
+  #   uw=!1, dw=e=>(!uw&&e.louderPenguinEnabled===!0&&(lw(`louderPenguinEnabled`,!1),
+  #                 uw=!0),{...vS,...e,...uw?{louderPenguinEnabled:!1}:{}})
+  # If `louderPenguinEnabled` is ever PERSISTED as true, upstream writes it back
+  # to false and latches it off for the rest of the session. Our default only
+  # survives while the key is ABSENT from the store - which is exactly why this
+  # patch changes the DEFAULT rather than writing the preference. Practical
+  # consequence for support answers: never tell a user to "switch it on in
+  # Settings" - doing so persists the key and thereby disables the feature.
   let pattern4Old = "quietPenguinEnabled:!1,louderPenguinEnabled:!1"
   let pattern4New = "quietPenguinEnabled:!0,louderPenguinEnabled:!0"
   var count4 = result.count(pattern4Old)

@@ -33,6 +33,13 @@ proc apply*(input: string): string =
   #   interposed `let` (timing/context capture), and a second if; the async
   #   arrow gained wrapping parens:
   #     e.on(`render-process-gone`,(async(t,r)=>{if(!XNn(r))return;let i=CPn();if(!(r.reason===`killed`&&(await new Promise((e=>setTimeout(e,WNn))),e.isDestroyed()||pI()))&&!e.isDestroyed()){if(D.info(`Main webview render process gone: %o
+  #   v1.37937.0: same shape, but the interposed `let` gained a SECOND
+  #   declarator - `let i=ONt(),a=hOt();` (was `let i=CPn();`). `a` is a cached
+  #   main-view heap sample read only for the handled path's telemetry payload,
+  #   so it adds no control flow; the capture below just accepts a
+  #   comma-separated run of call-initialised declarators and re-emits it
+  #   verbatim, preserving its position before the killed-wait `await`.
+  #
   # Either path out (guard fires, or second condition false) is a suppressed
   # death that stays silent -- the gap #128 is about. Inject a log into BOTH:
   #   - the guard's early return gains a log line before returning;
@@ -56,7 +63,7 @@ proc apply*(input: string): string =
   # is correct for N copies of the registration, while 0 matches means
   # upstream changed the code and the patch must fail loudly.
   let pattern =
-    re2"""(\.on\(["`]render-process-gone["`],\(?async\(([\w$]+),([\w$]+)\)=>\{)if\(!([\w$]+)\(([\w$]+)\)\)return;(let [\w$]+=[\w$]+(?:\.[\w$]+)*\([^()]*\);)if\(([^{}]{1,100}[^{}]{0,100}[^{}]{0,100})(\)\{if\(([\w$]+(?:\.[\w$]+)*)\.info\(["`]Main webview render process gone: %o)"""
+    re2"""(\.on\(["`]render-process-gone["`],\(?async\(([\w$]+),([\w$]+)\)=>\{)if\(!([\w$]+)\(([\w$]+)\)\)return;(let [\w$]+=[\w$]+(?:\.[\w$]+)*\([^()]*\)(?:,[\w$]+=[\w$]+(?:\.[\w$]+)*\([^()]*\))*;)if\(([^{}]{1,100}[^{}]{0,100}[^{}]{0,100})(\)\{if\(([\w$]+(?:\.[\w$]+)*)\.info\(["`]Main webview render process gone: %o)"""
   var count = 0
   result = input.replace(
     pattern,

@@ -165,7 +165,7 @@ section("[2] the key catalog");
   });
   const groups = r.groups.map((g) => g.key);
   ok(r.keys.every((k) => groups.indexOf(k.group) >= 0), "every key sits in a declared group");
-  ok(r.keys.every((k) => ["bool", "enum", "text", "secret", "int", "lines", "models", "json"]
+  ok(r.keys.every((k) => ["bool", "enum", "text", "secret", "int", "num", "lines", "models", "json"]
        .indexOf(k.kind) >= 0), "every key has a renderable kind");
   ok(r.keys.every((k) => k.kind !== "enum" || (k.options && k.options.length)),
      "every enum key carries its options");

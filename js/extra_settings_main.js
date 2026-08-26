@@ -337,7 +337,7 @@
     };
   }
 
-  // The managed-config key catalog of Claude Desktop v1.32885.1 (108 keys), read out of the
+  // The managed-config key catalog of Claude Desktop v1.37937.0 (117 keys), read out of the
   // bundle's own schema (flat key, zod leaf type, scopes, title). Upstream drives
   // its 3P Setup wizard from that schema; we cannot reach it from here (it is
   // module-scoped in index.pre.js), so this is a PINNED COPY and is therefore
@@ -349,7 +349,8 @@
   // shows what it wrote and where. (betaFeaturesEnabled, still in older 3P docs,
   // was removed upstream and is deliberately absent here.)
   //
-  // kind:  bool | enum | text | secret | int | lines | models | json
+  // kind:  bool | enum | text | secret | int | num | lines | models | json
+  //        num is a fractional number (min is exclusive, max inclusive); int is a whole one
   // scope: "3p" (only applies in 3P mode) | "both"
   // only:  render under this provider only
   // lock:  never writable from this page, and why
@@ -366,6 +367,15 @@
       label: "Model discovery", note: "Pull the model list from the provider instead of the list above." },
     { key: "modelPrefer1mContext", kind: "bool", group: "connection", scope: "3p",
       label: "Default to 1M context", note: "Prefer the 1M-token context window variant when a model offers one (upstream gates this @next)." },
+    { key: "inferenceModelPricingEnabled", kind: "bool", group: "connection", scope: "3p",
+      label: "Show estimated cost",
+      note: "Puts a USD cost estimate on the Usage page; without it that page reports token counts only, because the app cannot know your negotiated rates (upstream gates this @next)." },
+    { key: "inferenceModelPricingMultiplier", kind: "num", group: "connection", scope: "3p",
+      label: "Price multiplier", min: 0, max: 1,
+      note: "Scales every estimated cost, e.g. 0.85 for 85% of the rate; greater than 0 and at most 1 (upstream gates this @next)." },
+    { key: "inferenceModelPricing", kind: "json", group: "connection", scope: "3p",
+      label: "Per-model rates",
+      note: "JSON array of { name, inputPerMtok, outputPerMtok, cacheReadPerMtok, cacheWritePerMtok } rows, each replacing Anthropic list price for one model id in the Usage estimate (upstream gates this @next)." },
     { key: "inferenceCredentialKind", kind: "enum", group: "connection", scope: "3p",
       label: "Credential kind",
       options: ["static", "helper-script", "interactive", "vendor-profile", "oauth", "workforce"] },
@@ -491,6 +501,18 @@
       label: "Disable bundled skills and workflows" },
     { key: "skillCreationEnabled", kind: "bool", group: "sandbox", scope: "3p",
       label: "Allow user-created skills" },
+    { key: "userPluginMarketplacesEnabled", kind: "bool", group: "sandbox", scope: "3p", dflt: true,
+      label: "Allow user-added plugin marketplaces",
+      note: "Off hides the add-marketplace surfaces and refuses adds that still reach the app; marketplaces already registered on the machine and org-provisioned ones are unaffected (upstream gates this @next)." },
+    { key: "userPluginUploadsEnabled", kind: "bool", group: "sandbox", scope: "3p", dflt: true,
+      label: "Allow user-added plugins",
+      note: "Off hides every in-app way to add a plugin and refuses uploads that still reach the app; already-installed and org-provisioned plugins are unaffected (upstream gates this @next)." },
+    { key: "skipWebFetchPreflight", kind: "bool", group: "sandbox", scope: "3p",
+      label: "Skip WebFetch domain check",
+      note: "Drops Claude Code's per-domain blocklist lookup against api.anthropic.com before a WebFetch; turn it on where that host is firewalled, since the fetch otherwise fails outright (upstream gates this @next)." },
+    { key: "organizationInstructions", kind: "text", group: "sandbox", scope: "3p", maxLen: 3000,
+      label: "Organization instructions",
+      note: "Free text appended in a delimited block after the app's own system prompt in Chat, Cowork and Code, presented to the model as outranking user preferences; guidance, not an enforced control, and capped at 3000 characters upstream." },
     { key: "disableDeepLinkRegistration", kind: "bool", group: "sandbox", scope: "3p",
       label: "Disable claude:// deep links" },
     { key: "disableWslSessions", kind: "bool", group: "sandbox", scope: "both",
@@ -514,6 +536,9 @@
       label: "Allow user-added MCP servers", dflt: true },
     { key: "mcpPersistentAlwaysAllowEnabled", kind: "bool", group: "connectors", scope: "3p",
       label: "Allow persistent tool approvals", dflt: true },
+    { key: "mcpToolTimeoutSec", kind: "int", group: "connectors", scope: "3p", max: 3600,
+      label: "MCP tool call timeout (s)",
+      note: "Per-call deadline for every MCP tool call, 60 to 3600; Cowork and Chat default to 180, and setting it introduces a timeout in Code sessions too (upstream gates this @next)." },
     { key: "claudeInChromeEnabled", kind: "bool", group: "connectors", scope: "3p",
       label: "Enable Claude in Chrome" },
     { key: "isDesktopExtensionEnabled", kind: "bool", group: "connectors", scope: "both",
@@ -839,11 +864,30 @@
         }
         if (entry.max && n > entry.max) return { error: entry.key + " must be at most " + entry.max };
         return { value: n };
+      case "num":
+        if (typeof value === "string" && !value.trim()) return { del: true };
+        var f = typeof value === "number" ? value : Number(value);
+        if (typeof value === "boolean" || !isFinite(f)) {
+          return { error: entry.key + " must be a number" };
+        }
+        // min is exclusive, matching the schema's gt()/lte() pair.
+        if (entry.min !== undefined && f <= entry.min) {
+          return { error: entry.key + " must be greater than " + entry.min };
+        }
+        if (entry.max !== undefined && f > entry.max) {
+          return { error: entry.key + " must be at most " + entry.max };
+        }
+        return { value: f };
       case "text":
       case "secret":
         if (typeof value !== "string") return { error: entry.key + " must be a string" };
         if (!value.trim()) return { del: true };
-        if (value.length > 4096) return { error: entry.key + " is too long" };
+        // entry.maxLen mirrors upstream's own zod .max() where it is tighter than
+        // our generic ceiling. Writing a value upstream rejects is worse than a
+        // plain UI error: managed-settings.json is validated as ONE object, so a
+        // single out-of-range field can invalidate the whole file.
+        var __cap = typeof entry.maxLen === "number" ? entry.maxLen : 4096;
+        if (value.length > __cap) return { error: entry.key + " is too long (max " + __cap + ")" };
         return { value: value.trim() };
       case "lines":
       case "models":

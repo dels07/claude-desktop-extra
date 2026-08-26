@@ -2,6 +2,86 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-26
+
+### Claude Desktop v1.37937.0
+
+Rebased on the official v1.37937.0 Linux `.deb` (bundled Electron 42.10.0, up from 42.9.2). Two
+patches needed re-fitting after the re-minify; everything else applied unchanged, and the
+Linux-compatibility, platform-gate, ion-dist and built-in-MCP audits all came back clean - no
+feature moved behind a new macOS/Windows gate, and no new native module was added.
+
+**The feature merger anchor no longer depends on its neighbour.** `enable_local_agent_mode` finds
+the async capability merger - the function whose overrides turn on Code, Cowork and Computer Use for
+Linux - and appends our six capability overrides to it. It used to locate the merger by matching its
+closing `}}` followed by `;` or `,`. That trailing character was never part of the merger: it is
+whatever separator the minifier happened to emit for the *next* statement, and in v1.37937.0 it
+became `var` (`...p}}var hB=null;` where v1.34493.1 had `...l}},fR=null;`), so the patch stopped
+matching. The patch now matches the merger structurally and then *verifies* the match: the spread
+callee must be the static feature registry, proven by its body listing `quietPenguin:`. A generic
+shape plus a domain assertion is both more robust across re-minifies and harder to land on the wrong
+site than a tighter regex hung on an incidental character. The sub-patch also gained a proper
+idempotency branch that checks for its own injected overrides.
+
+**The renderer-death log survived a second `let` declarator.** `fix_renderer_gone_suppressed_log`
+logs main-webview renderer deaths that the upstream handler decides to swallow (#128). Its pattern
+spans a `let` statement interposed in the handler, which upstream widened from one declarator to two
+(`let i=ONt(),a=hOt();`). The capture now accepts a comma-separated run of call-initialised
+declarators.
+
+### Feature flags
+
+The catalog in `claude-desktop-extra.jsonc` tracks every GrowthBook flag observed being read from
+the feature store, so users can force one without a patch. It moves from 203 to 225 entries: 23
+added and one removed. The removed flag, `3673327456`, gated host-RAM-tiered Cowork VM memory
+sizing - the whole mechanism is gone upstream, though the `vmMemoryGB` and `vmCpuCount` preferences
+remain.
+
+The capability registry grew from 59 to 62 entries. Three of the four new capabilities
+(`sessionFolderFileAccess`, `spawnTaskPendingPop`, `chillingSlothSshWorktreeLocation`) carry no
+platform gate and work on Linux as shipped; the fourth (`violinBowHomeSettings`) is hardcoded off on
+every platform. `parkaMeetings` was removed upstream; it had been dev-gated and macOS-13-only, so it
+was already inert here.
+
+The `plugins` built-in MCP server gained a `search_connectors` tool. It is gated on 3p mode only,
+with no platform check, so it is available on Linux.
+
+### Panel tabs verified against live claude.ai
+
+The tab bar and the diff-scope dropdown bind to DOM that claude.ai serves remotely, not to anything
+in the desktop bundle: `.epitaxy-view-panel` and the `tileId` fiber prop appear zero times in
+v1.34493.1 and zero times in v1.37937.0. A desktop bump therefore cannot break them, and equally
+cannot prove them healthy - only a claude.ai redeploy moves these anchors, which is what broke them
+before.
+
+The check that does work is the `[cdb-tabs]` drift warnings, and they land in
+`~/.config/Claude/logs/claude.ai-web.log` (the page-context log), not in `claude-patches.log`. Every
+recorded drift warning predates the fix that went in on 2026-08-22, and none has fired since across
+subsequent sessions in which the page code demonstrably ran. The anchors are holding.
+
+### Deployment panel: eight new managed-settings keys
+
+Settings -> Extra -> Deployment renders a catalog pinned to the bundle's own schema, so a key
+upstream adds is one users cannot set from the panel. Upstream added eight and removed none, taking
+the catalog from 109 to 117: `inferenceModelPricing`, `inferenceModelPricingEnabled` and
+`inferenceModelPricingMultiplier` (a USD cost estimate on the Usage page, with per-model rates and a
+scaling factor), `mcpToolTimeoutSec` (a per-call MCP tool deadline), `organizationInstructions` (org
+text appended after the app's own system prompt), `skipWebFetchPreflight` (drops Claude Code's
+per-domain blocklist lookup, for sites where that host is firewalled), and
+`userPluginMarketplacesEnabled` / `userPluginUploadsEnabled`.
+
+The multiplier is a fraction between 0 and 1, which none of the existing field types could express -
+the integer type rejects `0.85` and the text type would write a string upstream's number validator
+refuses - so the panel gained a `num` field type. `organizationInstructions` now carries an enforced
+3000-character cap matching upstream's own limit. That matters more than a tidier error message:
+`managed-settings.json` is validated as a single object, so one out-of-range field can invalidate
+the entire file rather than just that key.
+
+The five new macOS `process.platform` gates are a single cluster: iCloud/File-Provider
+cloud-placeholder handling, which detects an undownloaded file by `st_blocks == 0` and reports
+"open it in Finder to download it first". There is no Linux analog - Drive on Linux is a FUSE mount
+that hydrates on open - so Linux correctly takes the plain-read path. Nothing to patch.
+
 ## 2026-08-24
 
 ### Bringing the window back to the front now works again (#233)

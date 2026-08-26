@@ -2074,7 +2074,9 @@
         node.classList.add("cdbx-row-wide");
       } else {
         control = el("input", "cdbx-input");
-        control.type = entry.kind === "secret" ? "password" : (entry.kind === "int" ? "number" : "text");
+        control.type = entry.kind === "secret" ? "password"
+          : (entry.kind === "int" || entry.kind === "num" ? "number" : "text");
+        if (entry.kind === "num") control.step = "any";
         if (entry.kind === "secret") {
           control.value = "";
           control.placeholder = isSet(value) ? "stored - type to replace" : "not set";

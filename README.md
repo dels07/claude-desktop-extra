@@ -288,7 +288,8 @@ This package adds its own section to Claude's Settings dialog: **Extra** - the h
 Four panels today:
 
 - **Extra → Themes** - all **97 bundled palettes** with live color dots; one click applies instantly in every open window. Make Claude Desktop blend into your Linux desktop: palettes matching stock DE looks (ADW/Adwaita, Breeze) sit next to the classics (Catppuccin, Nord, Gruvbox, Rose Pine, Everforest) and a [Gaming collection](docs/themes.md).
-- **Extra → Community Features** - the **4 optional features** this project currently adds, each as a switch ([6 patches](PATCHES.md#community-features): panel tabs, diff view modes, the theme-picker hotkey, a calmer Cowork glow), with a filter box over them.
+- **Extra → Community Features** - the **5 optional features** this project currently adds, each as a switch ([9 patches](PATCHES.md#community-features): Files quick open, panel tabs, diff view modes, the theme-picker hotkey, a calmer Cowork glow), with a filter box over them.
+  - **Files quick open** - <kbd>Ctrl</kbd>+<kbd>P</kbd> on the Code tab opens a VS Code-style quick-open box over the Files panel. Type part of a name - spaces split the query into pieces that must all match, in any order, so `user service` finds `user-service.spec.ts` - pick with the arrow keys or the mouse, and <kbd>Enter</kbd> opens it as a file tab in the panel; `:42` jumps to a line, an empty query lists what you opened recently. The same fix reaches the Files panel's own filter and the composer's `@` file picker. Opt-in: Settings → Extra → Community Features - the hotkey applies live, the spaces fix reaches the file index on its next start (after a restart).
 - **Extra → Anthropic Features** - all **134 upstream [feature flags](#feature-flag-overrides-advanced)** this build reads, each as a switch - no config-file editing needed.
 - **Extra → Deployment** - a **1P / 3P switch** plus the whole [third-party inference](#third-party--enterprise-inference) configuration as toggles and fields. Turning 3P on used to be a one-way door without a root shell; here it is a button, and every value is written to your own profile directory.
 
@@ -346,7 +347,7 @@ The official 3P docs cover only macOS and Windows. **[docs/third-party-inference
 
 The official Linux build ships one cross-platform JS bundle that gates plenty of features to macOS and Windows, and some of its behavior misfires on a Linux desktop. We apply a set of surgical JS patches to the `app.asar` at repackage time - one directory per purpose:
 
-- **[`patches/community/`](PATCHES.md#community-features)** (6 patches) - optional features you switch on yourself in Settings → **Extra** → **Community Features**. Off unless you ask for them (the theme picker is the exception, on by default).
+- **[`patches/community/`](PATCHES.md#community-features)** (9 patches) - optional features you switch on yourself in Settings → **Extra** → **Community Features**. Off unless you ask for them (the theme picker is the exception, on by default).
 - **[`patches/core/`](PATCHES.md#core-infrastructure)** (7 patches) - always-on infrastructure the rest builds on: the Extra settings pages themselves, the theme engine, the flag-override mechanism, and the multi-profile plumbing.
 - **[`patches/linux/`](PATCHES.md#linux-compatibility)** (31 patches) - upstream features still gated to macOS/Windows in the shared bundle, or that break in a Linux environment. Always on, nothing to configure.
 

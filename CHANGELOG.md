@@ -2,6 +2,60 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-30
+
+### Files quick open: no need to open the Files panel first
+
+Ctrl+P now works with the Files panel closed. It opens the panel through Anthropic's own session
+menu (⋮ → Files), waits for it, and opens the file you pick — so the shortcut is the only thing you
+have to remember. The panel is only ever opened when there is none: that menu entry is a toggle, and
+pressing it with a panel already open would close the one the feature needs. Upstream's own Ctrl+F
+accelerator cannot be reused for this — a key event sent from the page is untrusted and does nothing —
+so the menu is driven directly, and no menu is ever left hanging over the app.
+
+The handler the modal opens files through is now found by descending from the panel rather than by
+walking up from a tree row. A panel that has just been created renders its tree with no rows at all
+for a few seconds, and the old walk had nothing to start from; the descent finds the same handler
+(and the folder it was rendered for) whether or not a single row exists yet.
+
+## 2026-08-29
+
+### Files quick open (new community feature)
+
+**Ctrl+P over the Files panel.** A new opt-in switch in Settings → Extra → Community Features adds a
+VS Code-style quick-open box to the Code tab: type part of a file name, move with the arrow keys or
+the mouse, press Enter and the file opens as a tab inside the Files panel (the same path a click on
+the tree takes); `name:42` opens at a line, and an empty query lists recently opened files. The box
+asks Anthropic's own file index, so results and highlighting match the panel's filter and the
+composer's `@` picker. It needs the Files panel open and stays out of the way of a focused terminal.
+If the panel is open but its file tree is collapsed, Ctrl+P presses Anthropic's own "Show file tree"
+button first and opens the box as soon as the tree is back - that is also the only state in which the
+panel exposes no way to open a file at all. The box waits for the tree's *rows*, not just the tree,
+and keeps looking for a few seconds: the panel paints the empty tree first, and the way in to opening
+a file only exists once a row is on screen.
+
+**Spaces in a file search now mean "and".** Anthropic's fuzzy file index treated a space as a
+character to find, so `user service` returned nothing while `user-service` worked. With the
+switch on, the index splits the query into pieces that must all match, in any order, and merges the
+highlights - the way VS Code's quick open scores multi-word queries. This reaches the Files panel's
+filter and the `@` picker too. Off leaves the index exactly as shipped.
+
+**Multi-word results are ranked by file name.** The pieces of a multi-word query are matched
+separately, and merging them by the index's own per-piece ordering put whole directories above the
+file being looked for - `user service` led with three unrelated sibling folders and
+`user service spec` did not show `user-service.spec.ts` at all. Matches are now scored the way
+VS Code scores them, on the file name first and the folder only as a fallback, with short names and
+shallow paths preferred. Which files match is unchanged - only their order.
+
+The switch reaches the index through an environment variable, and Electron hands a utility process
+the app's *initial* environment unless the fork asks for the current one - so a patch now makes
+Anthropic's worker host pass the live environment explicitly. Without it the switch was set in the
+main process and never seen by the index. It still applies to file-index workers started after the
+switch flips (a running one keeps what it was born with until it restarts, or the app does).
+
+Three patches (`add_feature_files_quick_open`, `_bridge`, `_worker`), three test harnesses, and a new
+`baseline/FILES_QUICK_OPEN_ANCHORS.md` with the remote-DOM anchors the box depends on.
+
 ## 2026-08-26
 
 ### Claude Desktop v1.37937.0

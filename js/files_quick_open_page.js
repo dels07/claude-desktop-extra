@@ -613,6 +613,12 @@
     close();
   }
   function onInputKey(ev) {
+    // Enter, Escape and the arrow keys all belong to the IME while a
+    // composition is open: Enter commits the candidate, the arrows walk the
+    // candidate list. Acting on them would open a file the user never chose and
+    // close the box mid-word - the one path in this feature that produces a
+    // WRONG ACTION rather than a no-op, which its own contract forbids.
+    if (ev.isComposing || ev.keyCode === 229) return;
     if (ev.key === "ArrowDown") { ev.preventDefault(); select(sel + 1); }
     else if (ev.key === "ArrowUp") { ev.preventDefault(); select(sel - 1); }
     else if (ev.key === "Enter") { ev.preventDefault(); pick(sel); }
@@ -626,6 +632,16 @@
   function onCodeTab() { return /^\/epitaxy(\/|$)/.test(window.location.pathname); }
   function onKeyCapture(ev) {
     if (!enabled) return;
+    // A held key auto-repeats keydown, and open() is a TOGGLE - without this,
+    // holding Ctrl+P strobes the modal open/closed ~15x a second, each cycle
+    // re-running a full synchronous probe and re-driving the session menu
+    // (which is itself a toggle). Bail BEFORE preventDefault: a repeat is never
+    // treated as "handled". Same rule and rationale as js/panel_tabs_page.js.
+    if (ev.repeat) return;
+    // During an IME composition the keyboard belongs to the IME, and Chromium
+    // reports key "Process" here - so this is belt and braces for the hotkey,
+    // and the real guard is the one in onInputKey below.
+    if (ev.isComposing || ev.keyCode === 229) return;
     if (!ev.ctrlKey || ev.altKey || ev.metaKey || ev.shiftKey) return;
     if (ev.key !== "p" && ev.key !== "P") return;
     if (!onCodeTab()) return;

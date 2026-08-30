@@ -79,13 +79,32 @@ function __cdbQoSearch(index, query, limit) {
   var pieces = raw.split(/\s+/).filter(function (p) { return p.length > 0; });
   // Empty or single piece: upstream's own search, on the trimmed text (a trailing
   // space would otherwise have to match a literal space in the path).
-  if (pieces.length === 0) return index.search(raw, limit);
+  // A whitespace-only query is the EMPTY query, not a search for a literal
+  // space: upstream special-cases e.length===0 to its top-level cache, and
+  // passing "   " through instead scans for a space subsequence and returns
+  // junk. This path is reached by upstream's own consumers too (the @ picker
+  // and the Files filter box share this worker), so it must match upstream.
+  if (pieces.length === 0) return index.search("", limit);
   if (pieces.length === 1) return index.search(pieces[0], limit);
-  // Bound the per-keystroke cost: at most 4 scans. Extra pieces are folded into
-  // the last one (still a subsequence, just longer).
+  // Bound the per-keystroke cost at 4 index scans. Pieces beyond that are NOT
+  // dropped and NOT concatenated - they are applied afterwards as a filter over
+  // the (already narrow) intersection, which keeps the AND exact.
+  //
+  // Concatenating them was wrong: joining "service"+"factories" into one piece
+  // silently re-imposes an ORDER on characters the user typed as separate,
+  // order-free words. Measured on the real 1.40609.0 worker:
+  //   "modules user domain service factories" -> []            (no match)
+  //   "modules user domain factories service" -> user.service.ts
+  // for modules/user/src/domain/user-run/factories/user.service.ts - the same
+  // five correct words, one order finding the file and the other finding
+  // nothing, because the folded piece needed a "v" before "factories" and the
+  // path's only "v" is in "service" at the very end. That contradicts this
+  // file's own contract (every piece matches independently, in any order).
   var MAX_PIECES = 4;
+  var extraPieces = [];
   if (pieces.length > MAX_PIECES) {
-    pieces = pieces.slice(0, MAX_PIECES - 1).concat([pieces.slice(MAX_PIECES - 1).join("")]);
+    extraPieces = pieces.slice(MAX_PIECES);
+    pieces = pieces.slice(0, MAX_PIECES);
   }
   if (typeof limit !== "number" || limit <= 0) return [];
 
@@ -115,6 +134,19 @@ function __cdbQoSearch(index, query, limit) {
     });
   }
 
+  // Apply any piece beyond MAX_PIECES here rather than as a fifth scan: the same
+  // subsequence test upstream's scorer uses, with upstream's smart case, over a
+  // set that the first four pieces have already narrowed. Exact, and cheap.
+  if (extraPieces.length > 0) {
+    acc.forEach(function (entry, path) {
+      for (var e = 0; e < extraPieces.length; e++) {
+        var piece = extraPieces[e];
+        var hay = /[A-Z]/.test(piece) ? path : path.toLowerCase();
+        if (!__cdbQoIsSubseq(hay, piece)) { acc.delete(path); return; }
+      }
+    });
+  }
+
   // ORDER the intersection by a real score, not by the summed ordinal rank.
   // Summing two ordinals is not a score: a short path that lands early in both
   // per-piece scans (a DIRECTORY) then outranks the deep file the query actually
@@ -127,7 +159,8 @@ function __cdbQoSearch(index, query, limit) {
   // scaled version of it would overpower the label tiers on a large index, which
   // is the very bug this replaces. The result SET is untouched; only the order.
   var merged = [];
-  acc.forEach(function (entry) { entry.qoScore = __cdbQoScorePath(entry.path, pieces); merged.push(entry); });
+  var scorePieces = extraPieces.length ? pieces.concat(extraPieces) : pieces;
+  acc.forEach(function (entry) { entry.qoScore = __cdbQoScorePath(entry.path, scorePieces); merged.push(entry); });
   merged.sort(function (a, b) {
     return b.qoScore - a.qoScore || a.rank - b.rank || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   });

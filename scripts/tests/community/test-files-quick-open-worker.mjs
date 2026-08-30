@@ -174,14 +174,32 @@ const RANK_BOTH = BOTH.concat(["x.ts"]).sort();
   const h = loadHelper("1");
   const idx = fakeIndex(PATHS);
   eq(h(idx, "", 3).length, idx.search("", 3).length, "empty query is delegated unchanged (upstream serves its top-level cache)");
-  // MAX_PIECES = 4: "a b c d e f" -> ["a", "b", "c", "def"], so exactly four
-  // per-piece scans and the tail folded into the last one. Asserting the CALLS
-  // (not just "<= 5 results", which an empty result would also satisfy) is what
-  // proves the fold happened rather than the query being dropped.
+  // MAX_PIECES = 4 bounds the SCANS, not the pieces: "a b c d e f" scans the
+  // first four verbatim and applies "e" and "f" as a filter over the result.
+  // Asserting the CALLS (not just "<= 5 results", which an empty result would
+  // also satisfy) is what proves the cap held rather than the query being dropped.
   idx.calls.length = 0;
   h(idx, "a b c d e f", 5);
-  eq(idx.calls.length, 4, "more than four pieces are folded into four scans");
-  eq(idx.calls.map(([q]) => q), ["a", "b", "c", "def"], "the tail pieces are concatenated into the last one");
+  eq(idx.calls.length, 4, "more than four pieces still cost at most four scans");
+  eq(idx.calls.map(([q]) => q), ["a", "b", "c", "d"], "the first four pieces are scanned verbatim, never concatenated");
+
+  // REGRESSION: the pieces past the cap must stay an order-free AND. Folding
+  // them into one piece re-imposed an order and silently returned nothing -
+  // measured on the real worker for
+  // modules/user/src/domain/user-run/factories/user.service.ts:
+  // "...service factories" found nothing while "...factories service" matched.
+  const orderIdx = fakeIndex(["modules/user/src/domain/user-run/factories/user.service.ts"]);
+  const fwd = h(orderIdx, "modules user domain service factories", 10).map((r) => r.path);
+  const rev = h(orderIdx, "modules user domain factories service", 10).map((r) => r.path);
+  eq(fwd, rev, "5+ pieces are order-free: the same words match whatever order they are typed in");
+  eq(fwd.length, 1, "and they do match the file that carries all five");
+
+  // A whitespace-only query is the EMPTY query (upstream's top-level cache),
+  // not a search for a literal space.
+  const wsIdx = fakeIndex(["a/b.ts"]);
+  wsIdx.calls.length = 0;
+  h(wsIdx, "   ", 5);
+  eq(wsIdx.calls.map(([q]) => q), [""], "a whitespace-only query is delegated as the empty query");
 }
 
 // --- Part B: the REAL worker, patched by the compiled Nim binary ---------------------

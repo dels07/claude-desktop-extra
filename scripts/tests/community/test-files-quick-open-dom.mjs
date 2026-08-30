@@ -349,29 +349,84 @@ function fixture(opts) {
 // a couple of seconds; this only ever fires on a wedged browser.
 const SCENARIO_TIMEOUT_MS = Number(process.env.CDB_QOPEN_SCENARIO_TIMEOUT_MS || 60000);
 
+// The browser invocation, shared by the preflight and every scenario.
+//
+// --disable-background-networking (and friends) is THE fix for the CI stall, not
+// cosmetics. A stock Chrome profile phones home on startup - GCM registration,
+// component updater, safe-browsing lists. On a GitHub runner those requests hang
+// and retry: the failing run's stderr showed GCM DEPRECATED_ENDPOINT /
+// PHONE_REGISTRATION_ERROR retrying 25s apart, spanning the whole window in
+// which the browser was wedged. A PENDING NETWORK FETCH PAUSES CHROME'S VIRTUAL
+// CLOCK, so --virtual-time-budget never expires and --dump-dom never fires.
+// Locally those requests fail fast, which is why this only ever reproduced in CI.
+//
+// --no-proxy-server is hardening, NOT the fix - it was verified unnecessary
+// (Chrome bypasses proxies for localhost), and is kept only so the loopback
+// fetch cannot depend on ambient proxy config at all.
+const CHROME_ARGS = (dir, budgetMs, path) => ["--headless", "--disable-gpu", "--no-sandbox",
+  "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
+  "--no-proxy-server",
+  "--disable-background-networking", "--disable-sync",
+  "--disable-component-update", "--disable-default-apps",
+  "--disable-client-side-phishing-detection", "--metrics-recording-only",
+  "--user-data-dir=" + dir,
+  "--virtual-time-budget=" + budgetMs, "--dump-dom",
+  "http://127.0.0.1:" + PORT + (path || "/epitaxy")];
+
+// PREFLIGHT: prove this browser can complete a loopback load + virtual-time dump
+// AT ALL before running assertions, and separate the two failure meanings:
+//
+//   browser cannot render here          -> exit 3, reported SKIP (environment)
+//   browser renders, an assertion fails -> exit 1, reported FAIL (our regression)
+//
+// Without this split a browser that wedges in one environment reads as a code
+// regression and blocks every release until someone reads the log. That is the
+// same convention this file already uses for "no chromium on PATH" (exit 3), and
+// the same one scripts/tests/community/test-diff-views-expand-dom.mjs uses for a
+// missing font. The SKIP is deliberately loud about what went unverified - a
+// silent skip would be the false-positive the project forbids.
+function preflight() {
+  const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-pre-"));
+  writeFileSync(join(SERVER_DIR, "case.html"),
+    '<!doctype html><html><body><pre id="__result">{"preflight":true}</pre></body></html>');
+  try {
+    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, "/epitaxy"), { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
+    return /<pre id="__result">/.test(dom);
+  } catch (e) {
+    return false;
+  } finally { if (!KEEP) rmSync(dir, { recursive: true, force: true }); }
+}
+
 function run(fx, name, budgetMs) {
   const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-"));   // a per-scenario Chrome profile: no localStorage leaks between cases
   writeFileSync(join(SERVER_DIR, "case.html"), fx.html);
   try {
-    // The fixture is served over loopback HTTP (see above), so the browser must
-    // not be sent through a proxy: an http_proxy in the environment would route
-    // 127.0.0.1 somewhere that never answers. The first-run/default-browser
-    // suppression and the /dev/shm fallback are the usual CI hardening.
+    // TIMEOUT - this bound is load-bearing, do not remove it.
     //
-    // TIMEOUT: this call is otherwise an UNBOUNDED wait on a child browser. A
-    // headless Chrome that wedges (seen on GitHub's runners, never reproduced
-    // locally) turned the whole test job into a 6h workflow-timeout burn instead
-    // of a failure. Bound it per scenario so it fails loudly, and name the
-    // scenario so the next occurrence is diagnosable.
-    // scripts/run-feature-tests.sh carries a second, per-harness bound.
+    // This is the ONLY harness in the repo that loads its fixture over
+    // http://127.0.0.1 instead of file:// (it has to: the page module arms
+    // Ctrl+P only under /epitaxy, and a file:// document cannot have a real
+    // location.pathname). That difference is what made it able to hang forever:
+    // --dump-dom fires when the load completes, and a PENDING NETWORK FETCH
+    // PAUSES CHROME'S VIRTUAL CLOCK, so --virtual-time-budget never expires and
+    // the dump never fires. Demonstrated directly - against a server that
+    // accepts the connection and never responds, a 2.5s virtual-time budget was
+    // still running at 45s. A file:// load cannot stall this way, which is why
+    // no sibling harness could burn a job. With no timeout on execFileSync that
+    // wedge is unbounded, and on GitHub's runners it consumed the full 6h
+    // workflow timeout twice, reporting nothing.
+    //
+    // So: bound every launch and name the scenario, turning a silent stall into
+    // a fast, diagnosable failure. scripts/run-feature-tests.sh carries a
+    // second, per-harness bound as defence in depth.
+    //
+    // The flags are hardening, NOT the fix: --no-proxy-server was verified to be
+    // unnecessary (Chrome bypasses proxies for localhost - the pre-fix harness
+    // passes with http_proxy pointed at a black hole), it is kept only so the
+    // loopback fetch cannot depend on ambient proxy config at all.
     let dom;
     try {
-      dom = execFileSync(CHROMIUM, ["--headless", "--disable-gpu", "--no-sandbox",
-        "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
-        "--no-proxy-server",
-        "--user-data-dir=" + dir,
-        "--virtual-time-budget=" + (budgetMs || 2500), "--dump-dom",
-        "http://127.0.0.1:" + PORT + fx.path],
+      dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, budgetMs || 2500, fx.path),
         { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
     } catch (e) {
       if (e && (e.code === "ETIMEDOUT" || e.killed)) {
@@ -384,6 +439,17 @@ function run(fx, name, budgetMs) {
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
     return JSON.parse(unescapeHtml(m[1]));
   } finally { if (!KEEP) rmSync(dir, { recursive: true, force: true }); }
+}
+
+if (!preflight()) {
+  console.log("  SKIP: this browser cannot complete a loopback load + virtual-time DOM dump here.");
+  console.log("        Browser: " + CHROMIUM);
+  console.log("        NOT verified: every page-half assertion in this suite - the Ctrl+P hotkey,");
+  console.log("        the fiber harvest and its bounds, the degrade-to-a-warning paths, the IME and");
+  console.log("        auto-repeat guards, the pane/tree creation flows, and the MRU.");
+  console.log("        This is an ENVIRONMENT result, not a pass: run it on a machine with a working");
+  console.log("        headless Chromium before trusting a change to js/files_quick_open_page.js.");
+  process.exit(3);
 }
 
 let pass = 0, fail = 0;
@@ -438,6 +504,44 @@ const AFTER_PREF = (body) => `setTimeout(function () { ${body} }, 50);`;
     window.__ctrlP(); window.__type("f");
     setTimeout(function () { ${SINK}({ count: window.__rows().length }); }, 400);`) }), "cap");
   ok(r.count === 15, "at most 15 rows are rendered from a 40-result answer (" + r.count + ")");
+}
+// --- IME composition + key autorepeat -----------------------------------------------
+// Both guards protect against a WRONG ACTION, not a no-op, so they get their own
+// scenario. Enter/Arrow/Escape belong to the IME while a composition is open, and
+// a held Ctrl+P auto-repeats onto open(), which is a toggle.
+{
+  const r = run(fixture({ body: AFTER_PREF(`
+    window.__ctrlP(); window.__type("user service");
+    setTimeout(function () {
+      var inp = document.querySelector("#cdb-qopen input");
+      var out = {};
+      // A composing Enter must NOT open a file and must NOT close the box.
+      window.__key(inp, "Enter", { isComposing: true });
+      out.previewAfterComposingEnter = window.__calls.preview.slice();
+      out.openAfterComposingEnter = window.__open();
+      // Legacy IME path: some engines report keyCode 229 instead.
+      window.__key(inp, "Enter", { keyCode: 229 });
+      out.previewAfter229 = window.__calls.preview.slice();
+      // A composing arrow must not move our selection out from under the IME.
+      var before = window.__rows().findIndex(function (x) { return x.getAttribute("aria-selected") === "true"; });
+      window.__key(inp, "ArrowDown", { isComposing: true });
+      out.selMoved = window.__rows().findIndex(function (x) { return x.getAttribute("aria-selected") === "true"; }) !== before;
+      // A committed (non-composing) Enter still works.
+      window.__key(inp, "Enter");
+      out.previewAfterRealEnter = window.__calls.preview.slice();
+      // Autorepeat must not be treated as handled, and must not toggle the modal.
+      var wasOpen = window.__open();
+      out.repeatPrevented = window.__key(document.body, "p", { ctrlKey: true, repeat: true });
+      out.openUnchangedByRepeat = window.__open() === wasOpen;
+      ${SINK}(out);
+    }, 400);`) }), "ime-repeat");
+  ok(r.previewAfterComposingEnter.length === 0, "a composing Enter opens nothing");
+  ok(r.openAfterComposingEnter === true, "and leaves the box open");
+  ok(r.previewAfter229.length === 0, "the legacy keyCode 229 IME path is guarded too");
+  ok(r.selMoved === false, "a composing ArrowDown does not move the selection");
+  ok(r.previewAfterRealEnter.length === 1, "a real, committed Enter still opens the file");
+  ok(r.repeatPrevented === false, "an auto-repeated Ctrl+P is not treated as handled");
+  ok(r.openUnchangedByRepeat === true, "and does not toggle the modal");
 }
 // --- keyboard + mouse open ----------------------------------------------------------
 {

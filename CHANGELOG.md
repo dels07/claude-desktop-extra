@@ -51,13 +51,45 @@ Contributed by [@dels07](https://github.com/dels07) in [#238](https://github.com
 
 ### Feature test harnesses can no longer stall the pipeline
 
-A harness that wedges now fails its own suite instead of the whole job. The DOM suites drive a
-headless browser, and one that never exits used to hold the runner open until GitHub's 6h workflow
-timeout killed it - a stall that looks identical to "still running" and reports nothing. Each harness
-now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s) and a timeout is reported as a
-named failure; the quick-open DOM suite additionally bounds each browser launch and says which
-scenario hung. Its fixtures are served over loopback, so the browser is also told to bypass any
-proxy.
+A harness that wedges now fails its own suite instead of the whole job. One of them held the runner
+open until GitHub's 6h workflow timeout killed it, twice - a stall that reports nothing and looks
+identical to "still running".
+
+The cause is specific. The quick-open DOM suite is the only harness that loads its fixture over
+loopback HTTP rather than `file://`, because the page module arms Ctrl+P only under a real
+`/epitaxy` path. A pending network fetch pauses headless Chrome's virtual clock, so
+`--virtual-time-budget` never expires and `--dump-dom` never fires: against a server that accepts a
+connection and never answers, a 2.5s budget was measured still running at 45s. A `file://` load
+cannot stall that way, which is why no other harness could burn a job - and with no timeout on the
+browser call, the wedge was unbounded.
+
+Every harness now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s) and a timeout is
+reported as a named failure, and the quick-open suite bounds each browser launch and names the
+scenario that hung.
+
+The stall itself was Chrome phoning home. A stock profile starts GCM registration, the component
+updater and safe-browsing fetches; on a runner those hang and retry, and each pending request holds
+the virtual clock. Background networking is now off for the fixture browser. That suite also runs a
+preflight first, so a browser that cannot render in a given environment is reported as a loud SKIP
+naming what went unverified, rather than as a code regression that blocks releases.
+
+### Files quick open: three correctness fixes
+
+Found while reviewing the feature against the shipped build.
+
+**A query of five or more words no longer depends on the order you type them in.** Words past the
+fourth were being glued together into one, which silently reimposed an order on them: for
+`modules/user/src/domain/user-run/factories/user.service.ts`, `modules user domain service factories`
+found nothing while the same five words as `... factories service` found the file. The cap now bounds
+the index scans, not the words, and the extra words are applied afterwards as a filter, so all of
+them still have to match and the order never matters.
+
+**An IME composition no longer opens the wrong file.** Enter, Escape and the arrow keys belong to the
+input method while a candidate is open; the box was acting on them, so committing a word could open
+whatever file happened to be selected and close the box mid-word. It now leaves composing keys alone.
+
+**Holding Ctrl+P no longer strobes the box.** A held key auto-repeats, and Ctrl+P is a toggle, so the
+box opened and closed many times a second and re-drove the panel menu with it.
 
 ## 2026-08-26
 

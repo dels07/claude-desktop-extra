@@ -99,6 +99,16 @@
       return ipcRenderer.invoke("cdb-tabs:pref-set", enabled === true);
     },
 
+    // Files quick open (Ctrl+P over the Code tab's Files panel). BOTH channels are
+    // owned by patches/community/add_feature_files_quick_open.nim, not by the
+    // settings patch - the same cross-patch arrangement as panelTabsRead/Set.
+    quickOpenRead: function () {
+      return ipcRenderer.invoke("cdb-qopen:pref-read");
+    },
+    quickOpenSet: function (enabled) {
+      return ipcRenderer.invoke("cdb-qopen:pref-set", enabled === true);
+    },
+
     // Deployment mode (1P / 3P) and the third-party configuration the app boots
     // from. deployMode() takes only "1p"/"3p"; deploySet() only keys the main
     // side finds in its own catalog, and stored secrets never come back through

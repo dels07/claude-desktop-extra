@@ -2,6 +2,63 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-08-30
+
+### Files quick open (new community feature)
+
+**Ctrl+P over the Files panel.** A new opt-in switch in Settings → Extra → Community Features adds a
+VS Code-style quick-open box to the Code tab: type part of a file name, move with the arrow keys or
+the mouse, press Enter and the file opens as a tab inside the Files panel (the same path a click on
+the tree takes); `name:42` opens at a line, and an empty query lists recently opened files. The box
+asks Anthropic's own file index, so results and highlighting match the panel's filter and the
+composer's `@` picker. It stays out of the way of a focused terminal.
+If the panel is open but its file tree is collapsed, Ctrl+P presses Anthropic's own "Show file tree"
+button first and opens the box as soon as the tree is back - that is also the only state in which the
+panel exposes no way to open a file at all. The box waits for the tree's *rows*, not just the tree,
+and keeps looking for a few seconds: the panel paints the empty tree first, and the way in to opening
+a file only exists once a row is on screen.
+
+**Spaces in a file search now mean "and".** Anthropic's fuzzy file index treated a space as a
+character to find, so `user service` returned nothing while `user-service` worked. With the
+switch on, the index splits the query into pieces that must all match, in any order, and merges the
+highlights - the way VS Code's quick open scores multi-word queries. This reaches the Files panel's
+filter and the `@` picker too. Off leaves the index exactly as shipped.
+
+**Multi-word results are ranked by file name.** The pieces of a multi-word query are matched
+separately, and merging them by the index's own per-piece ordering put whole directories above the
+file being looked for - `user service` led with three unrelated sibling folders and
+`user service spec` did not show `user-service.spec.ts` at all. Matches are now scored the way
+VS Code scores them, on the file name first and the folder only as a fallback, with short names and
+shallow paths preferred. Which files match is unchanged - only their order.
+
+The switch reaches the index through an environment variable, and Electron hands a utility process
+the app's *initial* environment unless the fork asks for the current one - so a patch now makes
+Anthropic's worker host pass the live environment explicitly. Without it the switch was set in the
+main process and never seen by the index. It still applies to file-index workers started after the
+switch flips (a running one keeps what it was born with until it restarts, or the app does).
+
+**The panel no longer has to be open first.** Ctrl+P works with the Files panel closed: it
+opens the panel through Anthropic's own session menu, waits for it, and opens the file you pick.
+The panel is only ever opened when there is none, because that menu entry is a toggle and
+pressing it with a panel already open would close the one the feature needs. The handler files
+are opened through is found by descending from the panel rather than by walking up from a tree
+row, so it is found whether or not a single row has rendered yet.
+
+Three patches (`add_feature_files_quick_open`, `_bridge`, `_worker`), three test harnesses, and a new
+`baseline/FILES_QUICK_OPEN_ANCHORS.md` with the remote-DOM anchors the box depends on.
+
+Contributed by [@dels07](https://github.com/dels07) in [#238](https://github.com/patrickjaja/claude-desktop-extra/pull/238) - thanks!
+
+### Feature test harnesses can no longer stall the pipeline
+
+A harness that wedges now fails its own suite instead of the whole job. The DOM suites drive a
+headless browser, and one that never exits used to hold the runner open until GitHub's 6h workflow
+timeout killed it - a stall that looks identical to "still running" and reports nothing. Each harness
+now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s) and a timeout is reported as a
+named failure; the quick-open DOM suite additionally bounds each browser launch and says which
+scenario hung. Its fixtures are served over loopback, so the browser is also told to bypass any
+proxy.
+
 ## 2026-08-26
 
 ### Claude Desktop v1.37937.0

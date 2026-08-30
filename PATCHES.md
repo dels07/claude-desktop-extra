@@ -18,7 +18,7 @@ Each row below says what a patch does and why you would want it. The mechanism -
 
 ## Community features
 
-**6 patches**, each with a switch in Settings → **Extra** → **Community Features**. They reshape first-party surfaces, so they are asked for rather than assumed: turning one off is a full retreat to upstream's own behavior. Off by default, except the theme picker.
+**9 patches**, each with a switch in Settings → **Extra** → **Community Features**. They reshape first-party surfaces, so they are asked for rather than assumed: turning one off is a full retreat to upstream's own behavior. Off by default, except the theme picker.
 
 | Patch | What it does & why it exists |
 |-------|------------------------------|
@@ -28,8 +28,11 @@ Each row below says what a patch does and why you would want it. The mechanism -
 | [`add_feature_diff_views_bridge.nim`](patches/community/add_feature_diff_views_bridge.nim) | The narrow preload bridge the diff dropdown talks through: one fixed channel per call, because the page behind it is remote code |
 | [`add_feature_panel_tabs.nim`](patches/community/add_feature_panel_tabs.nim) | Turns the Code tab's side panels into a tab strip instead of a shrinking split, so each panel gets the full width and keeps its state when you switch away |
 | [`add_feature_panel_tabs_bridge.nim`](patches/community/add_feature_panel_tabs_bridge.nim) | The narrow preload bridge the tab strip talks through: one fixed channel per call, because the page behind it is remote code |
+| [`add_feature_files_quick_open.nim`](patches/community/add_feature_files_quick_open.nim) | <kbd>Ctrl</kbd>+<kbd>P</kbd> on the Code tab opens a VS Code-style quick-open box over the Files panel; arrow keys or mouse, <kbd>Enter</kbd> opens the file as a tab in the panel, `:42` jumps to a line, an empty query lists recently opened files |
+| [`add_feature_files_quick_open_bridge.nim`](patches/community/add_feature_files_quick_open_bridge.nim) | The narrow preload bridge the quick-open box talks through: one fixed channel per call, because the page behind it is remote code |
+| [`add_feature_files_quick_open_worker.nim`](patches/community/add_feature_files_quick_open_worker.nim) | Teaches Anthropic's fuzzy file index VS Code's space-separated pieces - `user service` finds `user-service.spec.ts`, in any word order. Upstream treats the space as a character to find and returns nothing. Also fixes the Files panel's own filter and the composer's `@` picker. Gated by an env var read at worker start, so flipping the switch reaches the file index on its next start (after a restart) |
 
-Panel tabs depends on DOM anchors in remote claude.ai code; they are inventoried with re-derivation recipes in [`baseline/PANEL_TABS_ANCHORS.md`](baseline/PANEL_TABS_ANCHORS.md) and re-validated on each upstream bump.
+Panel tabs and Files quick open depend on DOM anchors in remote claude.ai code; they are inventoried with re-derivation recipes in [`baseline/PANEL_TABS_ANCHORS.md`](baseline/PANEL_TABS_ANCHORS.md) and [`baseline/FILES_QUICK_OPEN_ANCHORS.md`](baseline/FILES_QUICK_OPEN_ANCHORS.md) and re-validated on each upstream bump.
 
 ## Core infrastructure
 

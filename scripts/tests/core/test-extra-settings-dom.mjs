@@ -297,6 +297,21 @@ async function featuresPanel(featuresItem) {
     ok(tabs.getAttribute("aria-checked") === "true", "the switch reflects the write");
   }
 
+  const qoSel = '.cdbx-switch[aria-label="open files with Ctrl+P from a quick-open box over the Files panel"]';
+  const qo = panel.querySelector(qoSel);
+  ok(!!qo, "renders the Files quick open switch");
+  if (qo) {
+    const qoRow = qo.closest(".cdbx-row");
+    ok(qoRow.querySelector(".cdbx-id").textContent === "Files quick open", "titled Files quick open");
+    ok(qo.getAttribute("aria-checked") === "false", "off by default (opt-in)");
+
+    qo.click();
+    await sleep(60);
+    ok(window.__quickOpenCalls.length === 1 && window.__quickOpenCalls[0] === true,
+       "clicking it calls quickOpenSet(true) exactly once: " + JSON.stringify(window.__quickOpenCalls));
+    ok(qo.getAttribute("aria-checked") === "true", "the switch reflects the write");
+  }
+
   const glow = panel.querySelector(".cdbx-switch[aria-label='calm the Cowork glow']");
   ok(!!glow, "the Cowork glow switch renders in the Community Features panel");
   if (glow) {
@@ -1179,6 +1194,8 @@ window.__deployCalls = [];
 window.__revealCalls = [];
 window.__panelTabsCalls = [];
 window.__panelTabsState = { ok: true, enabled: false, lockedByJsonc: false, source: "default" };
+window.__quickOpenCalls = [];
+window.__quickOpenState = { ok: true, enabled: false, lockedByJsonc: false, source: "default" };
 window.__diffViewsCalls = [];
 window.__diffViewsState = { ok: true, enabled: false, source: "default", defaultEnabled: false,
   lockedByJsonc: false, key: "diffViewModes" };
@@ -1280,6 +1297,8 @@ window.cdbExtra = {
     window.__panelTabsCalls.push(enabled);
     return Promise.resolve({ ok: true, enabled: enabled, path: "/tmp/panel-tabs.json" });
   },
+  quickOpenRead: function () { return Promise.resolve(window.__quickOpenState || { ok: true, enabled: false, lockedByJsonc: false, source: "default" }); },
+  quickOpenSet: function (enabled) { window.__quickOpenCalls = (window.__quickOpenCalls || []).concat([enabled]); return Promise.resolve({ ok: true, enabled: enabled }); },
   diffViewsRead: function () { return Promise.resolve(window.__diffViewsState); },
   diffViewsSet: function (enabled) {
     window.__diffViewsCalls.push(enabled);

@@ -21,7 +21,7 @@
  * Usage: node scripts/tests/community/test-files-quick-open-dom.mjs [--keep] [--chromium PATH]
  */
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,37 +41,31 @@ const CHROMIUM = (() => {
 })();
 if (!CHROMIUM) { console.log("  SKIP: no chromium on PATH"); process.exit(3); }
 
-// The page module only arms Ctrl+P under /epitaxy, so every fixture needs a real
-// location.pathname. A file:// document cannot get one - Chrome rejects
-// history.replaceState from an opaque origin with a SecurityError (verified on
-// Chrome 152) - so the fixture is served over loopback HTTP instead and the path
-// comes from the URL itself. The server runs as a child process because
-// execFileSync(chromium) blocks this process's event loop.
-const SERVER_DIR = mkdtempSync(join(tmpdir(), "cdb-qopen-srv-"));
-const SERVER_SRC = `
-  const http = require("http"), fs = require("fs"), path = require("path");
-  const dir = process.argv[1];
-  http.createServer(function (req, res) {
-    let body;
-    try { body = fs.readFileSync(path.join(dir, "case.html")); }
-    catch (e) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(body);
-  }).listen(0, "127.0.0.1", function () { fs.writeFileSync(path.join(dir, "port"), String(this.address().port)); });
-`;
-const SERVER = spawn(process.execPath, ["-e", SERVER_SRC, SERVER_DIR], { stdio: "ignore" });
+// Fixtures load from file://, like every other DOM suite in this repo.
+//
+// They used to be served over loopback HTTP, because the page module arms Ctrl+P
+// only under an /epitaxy pathname and a file:// document cannot have one. That
+// made this the only harness touching the network, and it could not run on a CI
+// runner at all: a pending network fetch pauses Chrome's virtual clock, so
+// --virtual-time-budget never expired and --dump-dom never fired. The suite
+// burned a 6h workflow timeout twice before that was understood.
+//
+// js/files_quick_open_page.js now reads the path from data-cdb-test-path when
+// (and only when) the document is file:, which is unreachable from the remote
+// https page it actually runs in. So the server is gone and this suite runs
+// anywhere the others do.
+const FIXTURE_DIR = mkdtempSync(join(tmpdir(), "cdb-qopen-fx-"));
 process.on("exit", () => {
-  try { SERVER.kill(); } catch {}
-  if (!KEEP) { try { rmSync(SERVER_DIR, { recursive: true, force: true }); } catch {} }
+  if (!KEEP) { try { rmSync(FIXTURE_DIR, { recursive: true, force: true }); } catch {} }
 });
-const PORT = (() => {
-  const nap = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
-  for (let i = 0; i < 250; i++) {
-    try { const p = readFileSync(join(SERVER_DIR, "port"), "utf8").trim(); if (p) return p; } catch {}
-    nap();
-  }
-  throw new Error("fixture http server did not start");
-})();
+// Chrome needs a distinct file per scenario, or it may serve the previous one
+// from cache; the counter also makes a --keep run readable.
+let fixtureSeq = 0;
+function writeFixture(html) {
+  const file = join(FIXTURE_DIR, "case-" + (++fixtureSeq) + ".html");
+  writeFileSync(file, html);
+  return "file://" + file;
+}
 
 const ROOT_DIR = "/home/u/proj/";
 // Mirrors HINT_NO_HANDLER in js/files_quick_open_page.js.
@@ -247,7 +241,11 @@ function fixture(opts) {
     (o.openedPaneTreeHidden
       ? `<button type="button" aria-label="Show file tree" aria-pressed="false">tree</button><div data-test-editor="">README.md</div><div data-test-slot=""></div>`
       : treeHtml) + `</div>`;
-  return { path: o.path, html: `<!doctype html><meta charset="utf-8">
+  // data-cdb-test-path is how a file:// document tells the page module which
+  // route it is standing in for; see onCodeTab() in js/files_quick_open_page.js.
+  // Keeping o.path as the source means every scenario's route stays exactly as
+  // it was when these fixtures were served over HTTP.
+  return { path: o.path, html: `<!doctype html><html data-cdb-test-path="${o.path}"><meta charset="utf-8">
 <div id="host">${opener}${pane}${term}</div>
 <pre id="__result"></pre>
 <script>${WIRING}</script>
@@ -390,7 +388,7 @@ function rmProfile(dir) {
 // what went unverified, rather than masquerading as either a pass or a code
 // regression. Run this suite locally, where it passes, before trusting a change
 // to js/files_quick_open_page.js.
-const CHROME_ARGS = (dir, budgetMs, path) => ["--headless", "--disable-gpu", "--no-sandbox",
+const CHROME_ARGS = (dir, budgetMs, url) => ["--headless", "--disable-gpu", "--no-sandbox",
   "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
   "--no-proxy-server",
   "--disable-background-networking", "--disable-sync",
@@ -398,7 +396,7 @@ const CHROME_ARGS = (dir, budgetMs, path) => ["--headless", "--disable-gpu", "--
   "--disable-client-side-phishing-detection", "--metrics-recording-only",
   "--user-data-dir=" + dir,
   "--virtual-time-budget=" + budgetMs, "--dump-dom",
-  "http://127.0.0.1:" + PORT + (path || "/epitaxy")];
+  url];
 
 // PREFLIGHT: prove this browser can complete a loopback load + virtual-time dump
 // AT ALL before running assertions, and separate the two failure meanings:
@@ -414,10 +412,9 @@ const CHROME_ARGS = (dir, budgetMs, path) => ["--headless", "--disable-gpu", "--
 // silent skip would be the false-positive the project forbids.
 function preflight() {
   const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-pre-"));
-  writeFileSync(join(SERVER_DIR, "case.html"),
-    '<!doctype html><html><body><pre id="__result">{"preflight":true}</pre></body></html>');
+  const url = writeFixture('<!doctype html><html><body><pre id="__result">{"preflight":true}</pre></body></html>');
   try {
-    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, "/epitaxy"),
+    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, url),
       { encoding: "utf8", timeout: PREFLIGHT_TIMEOUT_MS, killSignal: "SIGKILL" });
     return /<pre id="__result">/.test(dom);
   } catch (e) {
@@ -427,7 +424,7 @@ function preflight() {
 
 function run(fx, name, budgetMs) {
   const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-"));   // a per-scenario Chrome profile: no localStorage leaks between cases
-  writeFileSync(join(SERVER_DIR, "case.html"), fx.html);
+  const url = writeFixture(fx.html);
   try {
     // TIMEOUT - this bound is load-bearing, do not remove it.
     //
@@ -454,7 +451,7 @@ function run(fx, name, budgetMs) {
     // loopback fetch cannot depend on ambient proxy config at all.
     let dom;
     try {
-      dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, budgetMs || 2500, fx.path),
+      dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, budgetMs || 2500, url),
         { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
     } catch (e) {
       if (e && (e.code === "ETIMEDOUT" || e.killed)) {
@@ -467,6 +464,28 @@ function run(fx, name, budgetMs) {
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
     return JSON.parse(unescapeHtml(m[1]));
   } finally { if (!KEEP) rmProfile(dir); }
+}
+
+// The data-cdb-test-path seam exists only so this suite can use file:// like
+// every other DOM harness. It MUST stay unreachable from the remote https page
+// the module actually runs in - otherwise claude.ai markup could arm Ctrl+P
+// outside the Code tab. This runs onCodeTab() directly against both protocols,
+// so it needs no browser and cannot be skipped by an environment.
+{
+  const src = readFileSync(join(ROOT, "js/files_quick_open_page.js"), "utf8");
+  const body = (src.match(/function onCodeTab\(\) \{[\s\S]*?\n  \}/) || [])[0];
+  const armed = (protocol) => {
+    const fn = new Function("window", "document", body + "; return onCodeTab();");
+    return fn({ location: { protocol, pathname: "/settings" } },
+              { documentElement: { getAttribute: () => "/epitaxy" } });
+  };
+  let pre = 0, preFail = 0;
+  const t = (c, n) => { if (c) { pre++; console.log("  ok   " + n); } else { preFail++; console.log("  FAIL " + n); } };
+  t(!!body, "onCodeTab() is still shaped so this check can read it");
+  t(armed("file:") === true, "file: honours data-cdb-test-path (the harness depends on this)");
+  t(armed("https:") === false, "https: IGNORES data-cdb-test-path - remote code cannot arm the hotkey");
+  t(armed("http:") === false, "http: ignores it too");
+  if (preFail) { console.log("\n" + pre + " passed, " + preFail + " failed"); process.exit(1); }
 }
 
 if (!preflight()) {

@@ -67,13 +67,16 @@ Every harness now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s)
 reported as a named failure, and the quick-open suite bounds each browser launch and names the
 scenario that hung.
 
-Why the browser wedges on a runner is still open, and is now recorded rather than guessed at. Two
-theories were tried and neither held: Chrome's background network chatter, and an ambient proxy. The
-telling detail is that a static fixture with no script and no subresources wedges the same way, so it
-is not the feature's page module. That suite therefore runs a preflight first: an environment that
-cannot render reports a loud SKIP naming everything that went unverified, instead of masquerading as
-a pass or as a code regression that blocks releases. It passes locally, which is where the page half
-is meant to be exercised.
+The suite that wedged no longer touches the network at all. It was the only one serving its fixtures
+over loopback HTTP, because the quick-open hotkey arms only under an `/epitaxy` path and a local file
+cannot have one; a pending network fetch pauses the browser's virtual clock, so the page dump never
+happened. It now loads fixtures as plain files like every other suite, and the page script accepts
+its route from an attribute when (and only when) it is running from a local file, which the real app
+never is. Reproduced and fixed: with networking removed, the old suite cannot run and the new one
+passes in full.
+
+Each suite also runs under a wall clock now, and reports a timeout as a named failure rather than
+holding the job open.
 
 ### Files quick open: three correctness fixes
 

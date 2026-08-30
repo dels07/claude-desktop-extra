@@ -629,7 +629,32 @@
   function inTerminal(node) {
     try { return !!(node && node.closest && node.closest(".xterm")); } catch (e) { return false; }
   }
-  function onCodeTab() { return /^\/epitaxy(\/|$)/.test(window.location.pathname); }
+  // The Code tab is the only place this hotkey may fire.
+  //
+  // TEST SEAM, and it is deliberately unreachable in production: a file://
+  // document cannot carry a real /epitaxy pathname, so the DOM harness could
+  // only get one by serving its fixtures over loopback HTTP - which is exactly
+  // what made that suite impossible to run on a CI runner (a pending network
+  // fetch pauses Chrome's virtual clock, so --dump-dom never fires). Reading
+  // the path from an attribute INSTEAD, and only when the document is file:,
+  // lets the harness use file:// like every other DOM suite in this repo.
+  //
+  // Why this is safe rather than a hole: the branch is gated on
+  // location.protocol === "file:", and the page this module runs in is always
+  // remote https claude.ai (see injectHost in js/files_quick_open_main.js,
+  // which only injects into claude.ai/claude.com hosts). Remote code cannot
+  // reach a file: origin, so it cannot reach this branch to arm the hotkey
+  // somewhere it does not belong.
+  function onCodeTab() {
+    var path = window.location.pathname;
+    if (window.location.protocol === "file:") {
+      try {
+        var testPath = document.documentElement.getAttribute("data-cdb-test-path");
+        if (testPath) path = testPath;
+      } catch (e) {}
+    }
+    return /^\/epitaxy(\/|$)/.test(path);
+  }
   function onKeyCapture(ev) {
     if (!enabled) return;
     // A held key auto-repeats keydown, and open() is a TOGGLE - without this,

@@ -77,8 +77,16 @@ community/add_feature_panel_tabs: \
 
 community/add_feature_panel_tabs_bridge: ../js/panel_tabs_bridge.js
 
-# Files quick open: the worker patch embeds the multi-piece search helper.
+# Files quick open: the worker patch embeds the multi-piece search helper; the
+# main patch embeds the main-process module AND the page script; the bridge
+# patch embeds the preload snippet.
 community/add_feature_files_quick_open_worker: ../js/files_quick_open_worker.js
+
+community/add_feature_files_quick_open: \
+  ../js/files_quick_open_main.js \
+  ../js/files_quick_open_page.js
+
+community/add_feature_files_quick_open_bridge: ../js/files_quick_open_bridge.js
 
 # Theme patch embeds the spinner-reshape installer (swaps the loading-star SVG
 # for the active theme's custom shape) and the bundled community + gaming palette

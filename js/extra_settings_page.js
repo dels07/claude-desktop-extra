@@ -1075,6 +1075,40 @@
     });
   }
 
+  // --- files: Ctrl+P quick open over the Files panel -------------------------
+  // Ours, opt-in, and off by default: it adds a hotkey and a search box over
+  // Anthropic's own Files panel and changes how the file index treats spaces.
+  // The hotkey applies live; the index half applies to file-index workers
+  // started after the switch flips (upstream restarts them on cwd change / idle),
+  // so the note says "or after a restart" rather than pretending it is instant.
+  function renderFilesQuickOpenRow(panel) {
+    return renderToggleRow(panel, {
+      section: "Files",
+      title: "Files quick open",
+      note: "Ctrl+P on the Code tab opens a VS Code-style quick-open box over the Files panel: " +
+        "type part of a name, use the arrow keys or the mouse, press Enter to open it as a file tab. " +
+        "Spaces split the query into pieces that must all match, in any order - 'user service' " +
+        "finds user-service.spec.ts - and that also fixes the Files panel's own filter and the " +
+        "composer's @ file picker. Off leaves the panel and the index exactly as Anthropic ships them. " +
+        "The hotkey applies live; the spaces fix reaches the file index on its next start or after a restart.",
+      ariaLabel: "open files with Ctrl+P from a quick-open box over the Files panel",
+      read: "quickOpenRead",
+      write: "quickOpenSet",
+      lockFile: "claude-desktop-extra.jsonc",
+      isOn: function (res) { return res.enabled === true; },
+      describe: function (on) {
+        return on ? "on - Ctrl+P quick open, spaces split the search" : "off - stock Files panel and filter";
+      },
+      writeArg: function (next) { return next; },
+      toast: function (next) {
+        return next
+          ? "Files quick open on - press Ctrl+P on the Code tab"
+          : "Files quick open off - the Files panel is stock again";
+      },
+      errorPrefix: "Could not change Files quick open: "
+    });
+  }
+
   // --- motion: the pulsing Cowork glow ------------------------------------
   // Ours and it applies live, so it is a row in Community Features rather than a
   // nav entry of its own.
@@ -1290,6 +1324,7 @@
   var FEATURE_ROWS = [
     renderDiffViewsRow,
     renderPanelTabsRow,
+    renderFilesQuickOpenRow,
     renderGlowRow,
     renderThemePickerRow
   ];

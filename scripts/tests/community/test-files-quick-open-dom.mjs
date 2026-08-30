@@ -348,21 +348,48 @@ function fixture(opts) {
 // Per-scenario wall clock for the browser child. Every scenario here finishes in
 // a couple of seconds; this only ever fires on a wedged browser.
 const SCENARIO_TIMEOUT_MS = Number(process.env.CDB_QOPEN_SCENARIO_TIMEOUT_MS || 60000);
+// The preflight only has to render a static page, so it can give up much sooner
+// than a real scenario: this is the "can this browser work here at all" probe.
+const PREFLIGHT_TIMEOUT_MS = Number(process.env.CDB_QOPEN_PREFLIGHT_TIMEOUT_MS || 25000);
+
+// Removing a Chrome profile races the browser's own teardown: a SIGKILLed Chrome
+// leaves its crashpad handler writing into <profile>/Default for a moment, and
+// rmSync then throws ENOTEMPTY even with force:true (force only suppresses
+// "missing", not "busy"). That throw escaped a finally block and turned a
+// deliberate SKIP into a crash in CI. Cleanup of a temp dir must never decide
+// the outcome of a test run.
+function rmProfile(dir) {
+  try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+  catch (e) { /* a leftover temp dir is the OS's problem, not a test result */ }
+}
 
 // The browser invocation, shared by the preflight and every scenario.
 //
-// --disable-background-networking (and friends) is THE fix for the CI stall, not
-// cosmetics. A stock Chrome profile phones home on startup - GCM registration,
-// component updater, safe-browsing lists. On a GitHub runner those requests hang
-// and retry: the failing run's stderr showed GCM DEPRECATED_ENDPOINT /
-// PHONE_REGISTRATION_ERROR retrying 25s apart, spanning the whole window in
-// which the browser was wedged. A PENDING NETWORK FETCH PAUSES CHROME'S VIRTUAL
-// CLOCK, so --virtual-time-budget never expires and --dump-dom never fires.
-// Locally those requests fail fast, which is why this only ever reproduced in CI.
+// KNOWN LIMITATION: this suite does not run on GitHub's hosted runners.
 //
-// --no-proxy-server is hardening, NOT the fix - it was verified unnecessary
-// (Chrome bypasses proxies for localhost), and is kept only so the loopback
-// fetch cannot depend on ambient proxy config at all.
+// The mechanism is understood: --dump-dom fires when the load completes, and a
+// PENDING NETWORK FETCH PAUSES CHROME'S VIRTUAL CLOCK, so --virtual-time-budget
+// never expires and the dump never fires (demonstrated directly: against a
+// server that accepts a connection and never answers, a 2.5s budget was still
+// running at 45s). This is the only harness that loads its fixture over
+// loopback HTTP instead of file:// - it has to, because the page module arms
+// Ctrl+P only under a real /epitaxy pathname and a file:// document cannot have
+// one - which is why no sibling harness is affected.
+//
+// What is NOT established is why the loopback fetch fails to complete on a
+// runner. Two attempts did not fix it, and both are recorded here so nobody
+// repeats them: the GCM/component-updater theory (the failing run's stderr
+// showed GCM DEPRECATED_ENDPOINT / PHONE_REGISTRATION_ERROR retrying 25s apart,
+// but disabling background networking changed nothing) and an ambient-proxy
+// theory (Chrome bypasses proxies for localhost; verified unnecessary). The
+// decisive datapoint against both: the preflight below renders a STATIC page
+// with no script, no timers and no subresources, and it still wedges there.
+//
+// So the flags below are hardening, not a fix, and the preflight is what keeps
+// this honest: an environment that cannot run the browser reports SKIP and says
+// what went unverified, rather than masquerading as either a pass or a code
+// regression. Run this suite locally, where it passes, before trusting a change
+// to js/files_quick_open_page.js.
 const CHROME_ARGS = (dir, budgetMs, path) => ["--headless", "--disable-gpu", "--no-sandbox",
   "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
   "--no-proxy-server",
@@ -390,11 +417,12 @@ function preflight() {
   writeFileSync(join(SERVER_DIR, "case.html"),
     '<!doctype html><html><body><pre id="__result">{"preflight":true}</pre></body></html>');
   try {
-    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, "/epitaxy"), { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
+    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, "/epitaxy"),
+      { encoding: "utf8", timeout: PREFLIGHT_TIMEOUT_MS, killSignal: "SIGKILL" });
     return /<pre id="__result">/.test(dom);
   } catch (e) {
     return false;
-  } finally { if (!KEEP) rmSync(dir, { recursive: true, force: true }); }
+  } finally { if (!KEEP) rmProfile(dir); }
 }
 
 function run(fx, name, budgetMs) {
@@ -438,7 +466,7 @@ function run(fx, name, budgetMs) {
     const m = dom.match(/<pre id="__result">([\s\S]*?)<\/pre>/);
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
     return JSON.parse(unescapeHtml(m[1]));
-  } finally { if (!KEEP) rmSync(dir, { recursive: true, force: true }); }
+  } finally { if (!KEEP) rmProfile(dir); }
 }
 
 if (!preflight()) {

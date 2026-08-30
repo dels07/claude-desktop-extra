@@ -67,11 +67,13 @@ Every harness now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s)
 reported as a named failure, and the quick-open suite bounds each browser launch and names the
 scenario that hung.
 
-The stall itself was Chrome phoning home. A stock profile starts GCM registration, the component
-updater and safe-browsing fetches; on a runner those hang and retry, and each pending request holds
-the virtual clock. Background networking is now off for the fixture browser. That suite also runs a
-preflight first, so a browser that cannot render in a given environment is reported as a loud SKIP
-naming what went unverified, rather than as a code regression that blocks releases.
+Why the browser wedges on a runner is still open, and is now recorded rather than guessed at. Two
+theories were tried and neither held: Chrome's background network chatter, and an ambient proxy. The
+telling detail is that a static fixture with no script and no subresources wedges the same way, so it
+is not the feature's page module. That suite therefore runs a preflight first: an environment that
+cannot render reports a loud SKIP naming everything that went unverified, instead of masquerading as
+a pass or as a code regression that blocks releases. It passes locally, which is where the page half
+is meant to be exercised.
 
 ### Files quick open: three correctness fixes
 

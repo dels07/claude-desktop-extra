@@ -4,22 +4,6 @@ All notable changes to the claude-desktop-extra packages will be documented in t
 
 ## 2026-08-30
 
-### Files quick open: no need to open the Files panel first
-
-Ctrl+P now works with the Files panel closed. It opens the panel through Anthropic's own session
-menu (⋮ → Files), waits for it, and opens the file you pick — so the shortcut is the only thing you
-have to remember. The panel is only ever opened when there is none: that menu entry is a toggle, and
-pressing it with a panel already open would close the one the feature needs. Upstream's own Ctrl+F
-accelerator cannot be reused for this — a key event sent from the page is untrusted and does nothing —
-so the menu is driven directly, and no menu is ever left hanging over the app.
-
-The handler the modal opens files through is now found by descending from the panel rather than by
-walking up from a tree row. A panel that has just been created renders its tree with no rows at all
-for a few seconds, and the old walk had nothing to start from; the descent finds the same handler
-(and the folder it was rendered for) whether or not a single row exists yet.
-
-## 2026-08-29
-
 ### Files quick open (new community feature)
 
 **Ctrl+P over the Files panel.** A new opt-in switch in Settings → Extra → Community Features adds a
@@ -27,7 +11,7 @@ VS Code-style quick-open box to the Code tab: type part of a file name, move wit
 the mouse, press Enter and the file opens as a tab inside the Files panel (the same path a click on
 the tree takes); `name:42` opens at a line, and an empty query lists recently opened files. The box
 asks Anthropic's own file index, so results and highlighting match the panel's filter and the
-composer's `@` picker. It needs the Files panel open and stays out of the way of a focused terminal.
+composer's `@` picker. It stays out of the way of a focused terminal.
 If the panel is open but its file tree is collapsed, Ctrl+P presses Anthropic's own "Show file tree"
 button first and opens the box as soon as the tree is back - that is also the only state in which the
 panel exposes no way to open a file at all. The box waits for the tree's *rows*, not just the tree,
@@ -53,8 +37,27 @@ Anthropic's worker host pass the live environment explicitly. Without it the swi
 main process and never seen by the index. It still applies to file-index workers started after the
 switch flips (a running one keeps what it was born with until it restarts, or the app does).
 
+**The panel no longer has to be open first.** Ctrl+P works with the Files panel closed: it
+opens the panel through Anthropic's own session menu, waits for it, and opens the file you pick.
+The panel is only ever opened when there is none, because that menu entry is a toggle and
+pressing it with a panel already open would close the one the feature needs. The handler files
+are opened through is found by descending from the panel rather than by walking up from a tree
+row, so it is found whether or not a single row has rendered yet.
+
 Three patches (`add_feature_files_quick_open`, `_bridge`, `_worker`), three test harnesses, and a new
 `baseline/FILES_QUICK_OPEN_ANCHORS.md` with the remote-DOM anchors the box depends on.
+
+Contributed by [@dels07](https://github.com/dels07) in [#238](https://github.com/patrickjaja/claude-desktop-extra/pull/238) - thanks!
+
+### Feature test harnesses can no longer stall the pipeline
+
+A harness that wedges now fails its own suite instead of the whole job. The DOM suites drive a
+headless browser, and one that never exits used to hold the runner open until GitHub's 6h workflow
+timeout killed it - a stall that looks identical to "still running" and reports nothing. Each harness
+now runs under a wall clock (`FEATURE_TEST_TIMEOUT`, default 600s) and a timeout is reported as a
+named failure; the quick-open DOM suite additionally bounds each browser launch and says which
+scenario hung. Its fixtures are served over loopback, so the browser is also told to bypass any
+proxy.
 
 ## 2026-08-26
 

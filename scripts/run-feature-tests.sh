@@ -95,7 +95,12 @@ for suite in "${SUITES[@]}"; do
     rel="${suite#"$SCRIPT_DIR"/}"
     echo ""
     echo "--- $rel"
-    out=$(node "$suite" 2>&1) && rc=0 || rc=$?
+    # Hard per-harness wall clock. A harness that wedges (the DOM suites drive a
+    # headless browser, which can hang in an environment the author never saw)
+    # must fail THIS suite, not stall the whole job: without this a single stuck
+    # harness burned a 6h GitHub workflow timeout instead of reporting a failure.
+    # Generous on purpose - the slowest suite here runs well under a minute.
+    out=$(timeout --kill-after=30s "${FEATURE_TEST_TIMEOUT:-600}" node "$suite" 2>&1) && rc=0 || rc=$?
     echo "$out" | sed 's/^/    /'
     case $rc in
         0)
@@ -105,6 +110,11 @@ for suite in "${SUITES[@]}"; do
         3)
             echo "  SKIP  $rel (the harness reported a missing tool)"
             SKIPPED=$((SKIPPED + 1))
+            ;;
+        124|137)
+            echo "  FAIL  $rel (timed out after ${FEATURE_TEST_TIMEOUT:-600}s and was killed)"
+            FAILED=$((FAILED + 1))
+            FAILED_NAMES+=("$rel (timeout)")
             ;;
         *)
             echo "  FAIL  $rel (exit $rc)"

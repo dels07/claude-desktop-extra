@@ -345,14 +345,41 @@ function fixture(opts) {
 <script>${o.body || ""}</script>` };
 }
 
+// Per-scenario wall clock for the browser child. Every scenario here finishes in
+// a couple of seconds; this only ever fires on a wedged browser.
+const SCENARIO_TIMEOUT_MS = Number(process.env.CDB_QOPEN_SCENARIO_TIMEOUT_MS || 60000);
+
 function run(fx, name, budgetMs) {
   const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-"));   // a per-scenario Chrome profile: no localStorage leaks between cases
   writeFileSync(join(SERVER_DIR, "case.html"), fx.html);
   try {
-    const dom = execFileSync(CHROMIUM, ["--headless", "--disable-gpu", "--no-sandbox",
-      "--user-data-dir=" + dir,
-      "--virtual-time-budget=" + (budgetMs || 2500), "--dump-dom",
-      "http://127.0.0.1:" + PORT + fx.path], { encoding: "utf8" });
+    // The fixture is served over loopback HTTP (see above), so the browser must
+    // not be sent through a proxy: an http_proxy in the environment would route
+    // 127.0.0.1 somewhere that never answers. The first-run/default-browser
+    // suppression and the /dev/shm fallback are the usual CI hardening.
+    //
+    // TIMEOUT: this call is otherwise an UNBOUNDED wait on a child browser. A
+    // headless Chrome that wedges (seen on GitHub's runners, never reproduced
+    // locally) turned the whole test job into a 6h workflow-timeout burn instead
+    // of a failure. Bound it per scenario so it fails loudly, and name the
+    // scenario so the next occurrence is diagnosable.
+    // scripts/run-feature-tests.sh carries a second, per-harness bound.
+    let dom;
+    try {
+      dom = execFileSync(CHROMIUM, ["--headless", "--disable-gpu", "--no-sandbox",
+        "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
+        "--no-proxy-server",
+        "--user-data-dir=" + dir,
+        "--virtual-time-budget=" + (budgetMs || 2500), "--dump-dom",
+        "http://127.0.0.1:" + PORT + fx.path],
+        { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
+    } catch (e) {
+      if (e && (e.code === "ETIMEDOUT" || e.killed)) {
+        throw new Error("chromium hung for scenario \"" + name + "\" (killed after " +
+          SCENARIO_TIMEOUT_MS + "ms) -- browser: " + CHROMIUM);
+      }
+      throw e;
+    }
     const m = dom.match(/<pre id="__result">([\s\S]*?)<\/pre>/);
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
     return JSON.parse(unescapeHtml(m[1]));

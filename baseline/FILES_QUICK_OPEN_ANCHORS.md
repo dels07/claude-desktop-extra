@@ -2,12 +2,17 @@
 
 Measured live over CDP against Claude Desktop **v1.37937.3**, and **re-measured on v1.40609.0**
 (both claude.ai/epitaxy) on **2026-08-29**. The page half (`js/files_quick_open_page.js`) keys off
-REMOTE claude.ai markup and React fiber props. None of these strings occur in `app.asar`; re-run the
-recipes below against the live app after an upstream bump or when a `[cdb-qopen]` warning appears in
+REMOTE claude.ai markup and React fiber props; re-run the recipes below against the live app after an
+upstream bump or when a `[cdb-qopen]` warning appears in
 `~/.config/Claude/logs/claude.ai-web.log`.
-The one exception is the last row — the generic worker-host fork — which lives in the LOCAL main
-bundle, is rewritten by `add_feature_files_quick_open.nim` sub-patch B, and is checked with grep
-rather than the console.
+
+Two rows are NOT remote and can be checked locally with grep instead of the console:
+the generic worker-host fork (the last row), which lives in the LOCAL main bundle and is rewritten by
+`add_feature_files_quick_open.nim` sub-patch B; and `fetchMentionOptions`, which is a **local eIPC
+channel**, not remote markup - the preload (`.vite/build/mainView.js`) exposes it on
+`window["claude.web"].Resources`, and main implements it over `FileIndexHost.search` (the very call
+site `add_feature_files_quick_open_worker.nim` rewrites). Verified on 1.40609.0. Only the DOM and
+fiber rows are genuinely remote.
 
 ## Anchors
 
@@ -22,26 +27,26 @@ rather than the console.
 | `window["claude.web"].Resources.fetchMentionOptions(q, "files")` | search | ≤ 50 `{id: "file-<abs>", label: "<rel>", icon, category: "Files", metadata: JSON {path, isDirectory, positions}}`, ~90 ms; rooted at the FOCUSED session cwd | warning `search-*`; hint "Search unavailable" |
 | `MENU_SEEDS` → `SESSION_MENU_SEL` → the `Files` entry | creating a Files pane when none is open | The session ⋮ is `button[aria-label^="More options for "]`, but ~76 of those exist (one per sidebar session), and it is **not** a sibling of the `Terminal` / `Diff (uncommitted changes)` / `Browser` toolbar buttons. Measured 2026-08-30 on 1.40609.0: climbing from one of those buttons, the ancestor **2 parents up** holds exactly one - that climb (`MENU_CLIMB_HOPS`, refuses on >1 match) is the anchor. Its menu renders async and its entry reads **`FilesCtrlF`** (label + shortcut, no separator, hence the `/^files/i` prefix test); clicking it mounts the pane in ~900 ms. The entry is a **TOGGLE** - only ever pressed when there is no pane. Upstream's own `Ctrl+F` accelerator is unusable from the page: a synthetic key event is untrusted and does nothing. **Nothing the page can dispatch closes that menu either** (measured 2026-08-30: Escape on body/document/the menu itself, an outside pointerdown, and a second click on the ⋮ all leave it open) - it stays mounted behind our own full-screen overlay and disappears together with it when the modal closes, so no menu is ever left over the app. `dismissMenu()` is a best-effort attempt kept for other builds, not a guarantee | the modal degrades to `HINT_NO_PANE`; warnings `no-files-menu-item` / `session-menu-threw` / `files-item-threw`. A relabelled entry means updating `FILES_ITEM_RE` |
 | `Ctrl+P` | hotkey | unbound in upstream's Electron menu (only `CmdOrCtrl+Plus` matches the substring); renderer bindings unknown, hence the capture-phase listener | a conflict shows up as both actions firing - re-check `mainView`/renderer |
-| generic worker-host fork (LOCAL bundle) | the `CDB_FILES_QUICK_OPEN` env gate reaches the file-index worker | `utilityProcess.fork(<path>,[],{serviceName:<name>,stdio:\`pipe\`})` - exactly ONE occurrence in the staged bundle (1.37937.3 and 1.40609.0), the host that `worker:{buildName:\`file-index-worker\`` uses. `add_feature_files_quick_open.nim` **sub-patch B rewrites it** to add `env:Object.assign({},process.env)`, because Electron hands a `fork()` with no `env` option the browser's INITIAL environment, not main's live `process.env` (measured live: the key was in main's `/proc/<pid>/environ` and in none of the utility processes). Passing main's LIVE env also forwards whatever upstream writes into it after startup — measured on 1.37937.3: `CLAUDE_CODE_SESSION_ACCESS_TOKEN` and `CLAUDE_CONFIG_DIR` — to every worker that host spawns (file-index, transcript-search, heavy-work, stall-sampler), which the initial-env default did not; same user, same app, so an exposure-surface widening rather than a boundary crossing | the patch **fails the build** (strict count: exactly one match required), so this cannot regress silently. If upstream adds its own `env:` there, merge into it instead of prepending a second key |
+| generic worker-host fork (LOCAL bundle) | the `CDB_FILES_QUICK_OPEN` env gate reaches the file-index worker | `utilityProcess.fork(<path>,[],{serviceName:<name>,stdio:\`pipe\`})` - exactly ONE occurrence in the staged bundle (1.37937.3 and 1.40609.0), the host that `worker:{buildName:\`file-index-worker\`` uses. `add_feature_files_quick_open.nim` **sub-patch B rewrites it** to add `env:Object.assign({},process.env)`, because Electron hands a `fork()` with no `env` option the browser's INITIAL environment, not main's live `process.env` (measured live: the key was in main's `/proc/<pid>/environ` and in none of the utility processes). Passing main's LIVE env also forwards whatever upstream writes into it after startup - measured on 1.37937.3: `CLAUDE_CODE_SESSION_ACCESS_TOKEN` and `CLAUDE_CONFIG_DIR` - to every worker that host spawns (file-index, transcript-search, heavy-work, stall-sampler), which the initial-env default did not; same user, same app, so an exposure-surface widening rather than a boundary crossing | the patch **fails the build** (strict count: exactly one match required), so this cannot regress silently. If upstream adds its own `env:` there, merge into it instead of prepending a second key |
 
 ## The harvest is row-driven, and it retries
 
 `onPreview` is reachable only from a `[role="treeitem"]` row, so the page cannot use the DOM as its
 wait condition: on a COLD render (tree hidden since app start) the `[role=tree]` element commits
 first and its rows land ~200-700 ms later. Waiting on "a tree or a row exists" therefore harvested
-nothing, gave up for good, and Enter opened nothing — the live defect measured on 1.40609.0.
+nothing, gave up for good, and Enter opened nothing - the live defect measured on 1.40609.0.
 
 `js/files_quick_open_page.js` polls `findPreviewProps()` itself every `TREE_POLL_MS` (50 ms) up to
 `TREE_WAIT_MS` (3000 ms) and finishes the moment it returns non-null. The same retry covers the
-non-deferred path (a visible tree with zero rows — an empty folder, or upstream's own filter matched
+non-deferred path (a visible tree with zero rows - an empty folder, or upstream's own filter matched
 nothing). A `memoizedProps` accessor that THROWS is final, not "not yet": the retry stops, `open-threw`
 is warned once and the hint says the anchor is gone.
 
 ## Verifying the `CDB_FILES_QUICK_OPEN` env gate
 
 **`/proc/<pid>/environ` is not a valid probe.** Chromium empties the environ block of its utility
-processes — reading it yields `disable-logging` plus NULs regardless of what the process actually
-inherited — so it can neither confirm nor refute that the key reached the file-index worker (it
+processes - reading it yields `disable-logging` plus NULs regardless of what the process actually
+inherited - so it can neither confirm nor refute that the key reached the file-index worker (it
 produced a false negative on 2026-08-29). The **behavioural** check is the instrument: with the pref
 on, run recipe 3 below with a two-word query,
 `window["claude.web"].Resources.fetchMentionOptions("user service", "files")`. Multi-piece hits

@@ -11,9 +11,11 @@ import std/[os, strutils]
 const BRIDGE_JS = staticRead("../../js/files_quick_open_bridge.js")
 
 # Directive prologues only take effect when they are the very first statement,
-# so if upstream ever re-introduces one we must inject *after* it rather than
-# in front of it. As of v1.26832.0 the bundle has none (it opens with the
-# Sentry release IIFE), so position 0 is the injection point.
+# so we must inject *after* one rather than in front of it. This is live, not
+# hypothetical: v1.26832.0 had none (the bundle opened with the Sentry release
+# IIFE), but v1.40609.0 DOES open with `"use strict";` - the patch reports
+# "inserted after the directive prologue" there. Both shapes are handled below;
+# do not simplify this back to a fixed position-0 injection.
 const DIRECTIVES = ["\"use strict\";", "'use strict';"]
 
 # Positive end-state markers (Rule 6): the build tag and the exposed global.

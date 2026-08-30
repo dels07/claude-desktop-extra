@@ -84,6 +84,12 @@ const FILES = [
 // (the worker patch's job - this suite is about the PAGE), the upstream result
 // shape {id:"file-<abs>", label:<rel>, icon, category, metadata: JSON string}.
 const WIRING = `
+// Every file:// page in a profile shares ONE localStorage origin, and scenarios
+// no longer get a private Chrome profile (that was the --user-data-dir the
+// sibling harness does without, and a fresh profile per launch is the one thing
+// that recipe never asked a runner to do). So each fixture starts by clearing
+// it: the MRU cases seed what they need explicitly, and nothing leaks forward.
+try { window.localStorage.clear(); } catch (e) {}
 window.__calls = { preview: [], mention: [] };
 window.__errs = [];
 window.addEventListener("error", function (e) { window.__errs.push(String(e && e.message)); });
@@ -350,17 +356,6 @@ const SCENARIO_TIMEOUT_MS = Number(process.env.CDB_QOPEN_SCENARIO_TIMEOUT_MS || 
 // than a real scenario: this is the "can this browser work here at all" probe.
 const PREFLIGHT_TIMEOUT_MS = Number(process.env.CDB_QOPEN_PREFLIGHT_TIMEOUT_MS || 25000);
 
-// Removing a Chrome profile races the browser's own teardown: a SIGKILLed Chrome
-// leaves its crashpad handler writing into <profile>/Default for a moment, and
-// rmSync then throws ENOTEMPTY even with force:true (force only suppresses
-// "missing", not "busy"). That throw escaped a finally block and turned a
-// deliberate SKIP into a crash in CI. Cleanup of a temp dir must never decide
-// the outcome of a test run.
-function rmProfile(dir) {
-  try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
-  catch (e) { /* a leftover temp dir is the OS's problem, not a test result */ }
-}
-
 // The browser invocation, shared by the preflight and every scenario.
 //
 // KNOWN LIMITATION: this suite does not run on GitHub's hosted runners.
@@ -388,15 +383,22 @@ function rmProfile(dir) {
 // what went unverified, rather than masquerading as either a pass or a code
 // regression. Run this suite locally, where it passes, before trusting a change
 // to js/files_quick_open_page.js.
-const CHROME_ARGS = (dir, budgetMs, url) => ["--headless", "--disable-gpu", "--no-sandbox",
+const CHROME_ARGS = (budgetMs, url) => ["--headless", "--disable-gpu", "--no-sandbox",
+  "--hide-scrollbars", "--allow-file-access-from-files",
   "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
-  "--no-proxy-server",
   "--disable-background-networking", "--disable-sync",
   "--disable-component-update", "--disable-default-apps",
   "--disable-client-side-phishing-detection", "--metrics-recording-only",
-  "--user-data-dir=" + dir,
+  "--window-size=1000,700",
   "--virtual-time-budget=" + budgetMs, "--dump-dom",
   url];
+
+// Chrome's stderr is DISCARDED and the buffer is large, exactly as the sibling
+// harness does it. On a runner Chrome is noisy (DBus, GCM, sandbox warnings),
+// and execFileSync's default sends the child's stderr to the parent's, which is
+// itself a pipe being captured by scripts/run-feature-tests.sh. Draining that is
+// nobody's job while this process is blocked inside execFileSync.
+const CHROME_IO = { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] };
 
 // PREFLIGHT: prove this browser can complete a loopback load + virtual-time dump
 // AT ALL before running assertions, and separate the two failure meanings:
@@ -411,59 +413,46 @@ const CHROME_ARGS = (dir, budgetMs, url) => ["--headless", "--disable-gpu", "--n
 // missing font. The SKIP is deliberately loud about what went unverified - a
 // silent skip would be the false-positive the project forbids.
 function preflight() {
-  const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-pre-"));
   const url = writeFixture('<!doctype html><html><body><pre id="__result">{"preflight":true}</pre></body></html>');
   try {
-    const dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, 1500, url),
-      { encoding: "utf8", timeout: PREFLIGHT_TIMEOUT_MS, killSignal: "SIGKILL" });
+    const dom = execFileSync(CHROMIUM, CHROME_ARGS(1500, url),
+      Object.assign({ timeout: PREFLIGHT_TIMEOUT_MS, killSignal: "SIGKILL" }, CHROME_IO));
     return /<pre id="__result">/.test(dom);
   } catch (e) {
     return false;
-  } finally { if (!KEEP) rmProfile(dir); }
+  }
 }
 
 function run(fx, name, budgetMs) {
-  const dir = mkdtempSync(join(tmpdir(), "cdb-qopen-"));   // a per-scenario Chrome profile: no localStorage leaks between cases
   const url = writeFixture(fx.html);
+  // TIMEOUT - this bound is load-bearing, do not remove it.
+  //
+  // This suite used to serve its fixtures over loopback HTTP, because the page
+  // module arms Ctrl+P only under an /epitaxy pathname and a file:// document
+  // cannot have one. That made it the only harness touching the network, and a
+  // PENDING NETWORK FETCH PAUSES CHROME'S VIRTUAL CLOCK - so
+  // --virtual-time-budget never expired and --dump-dom never fired. It burned a
+  // 6h workflow timeout twice before that was understood. Reproduced with
+  // networking removed: the HTTP version could not run, this one passes in full.
+  //
+  // The dependency is gone (see writeFixture and onCodeTab's file: seam), but the
+  // bound stays: a wedged browser must fail fast and name its scenario rather
+  // than stall a job. scripts/run-feature-tests.sh carries a second, per-harness
+  // bound, and preflight() above turns "cannot run here at all" into a SKIP.
+  let dom;
   try {
-    // TIMEOUT - this bound is load-bearing, do not remove it.
-    //
-    // This is the ONLY harness in the repo that loads its fixture over
-    // http://127.0.0.1 instead of file:// (it has to: the page module arms
-    // Ctrl+P only under /epitaxy, and a file:// document cannot have a real
-    // location.pathname). That difference is what made it able to hang forever:
-    // --dump-dom fires when the load completes, and a PENDING NETWORK FETCH
-    // PAUSES CHROME'S VIRTUAL CLOCK, so --virtual-time-budget never expires and
-    // the dump never fires. Demonstrated directly - against a server that
-    // accepts the connection and never responds, a 2.5s virtual-time budget was
-    // still running at 45s. A file:// load cannot stall this way, which is why
-    // no sibling harness could burn a job. With no timeout on execFileSync that
-    // wedge is unbounded, and on GitHub's runners it consumed the full 6h
-    // workflow timeout twice, reporting nothing.
-    //
-    // So: bound every launch and name the scenario, turning a silent stall into
-    // a fast, diagnosable failure. scripts/run-feature-tests.sh carries a
-    // second, per-harness bound as defence in depth.
-    //
-    // The flags are hardening, NOT the fix: --no-proxy-server was verified to be
-    // unnecessary (Chrome bypasses proxies for localhost - the pre-fix harness
-    // passes with http_proxy pointed at a black hole), it is kept only so the
-    // loopback fetch cannot depend on ambient proxy config at all.
-    let dom;
-    try {
-      dom = execFileSync(CHROMIUM, CHROME_ARGS(dir, budgetMs || 2500, url),
-        { encoding: "utf8", timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" });
-    } catch (e) {
-      if (e && (e.code === "ETIMEDOUT" || e.killed)) {
-        throw new Error("chromium hung for scenario \"" + name + "\" (killed after " +
-          SCENARIO_TIMEOUT_MS + "ms) -- browser: " + CHROMIUM);
-      }
-      throw e;
+    dom = execFileSync(CHROMIUM, CHROME_ARGS(budgetMs || 2500, url),
+      Object.assign({ timeout: SCENARIO_TIMEOUT_MS, killSignal: "SIGKILL" }, CHROME_IO));
+  } catch (e) {
+    if (e && (e.code === "ETIMEDOUT" || e.killed)) {
+      throw new Error("chromium hung for scenario \"" + name + "\" (killed after " +
+        SCENARIO_TIMEOUT_MS + "ms) -- browser: " + CHROMIUM);
     }
-    const m = dom.match(/<pre id="__result">([\s\S]*?)<\/pre>/);
+    throw e;
+  }
+  const m = dom.match(/<pre id="__result">([\s\S]*?)<\/pre>/);
     if (!m) throw new Error("no #__result sink in dumped DOM for " + name);
     return JSON.parse(unescapeHtml(m[1]));
-  } finally { if (!KEEP) rmProfile(dir); }
 }
 
 // The data-cdb-test-path seam exists only so this suite can use file:// like
